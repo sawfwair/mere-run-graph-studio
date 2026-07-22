@@ -1,0 +1,24 @@
+name = "mere-run-graph-studio"
+main = "cloud/worker.ts"
+compatibility_date = "2026-07-19"
+compatibility_flags = ["nodejs_compat"]
+routes = [{ pattern = "studio.mere.run", custom_domain = true }]
+
+[assets]
+directory = "./cloud/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+[[durable_objects.bindings]]
+name = "STUDIO_ACCOUNTS"
+class_name = "StudioAccount"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["StudioAccount"]
+
+[vars]
+BROKER_ORIGIN = "https://mere.world"
+RELAY_ORIGIN = "https://relay.mere.run"
+STUDIO_ORIGIN = "https://studio.mere.run"

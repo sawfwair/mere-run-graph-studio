@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mere.run/schemas/graph-studio-project.v1.schema.json",
+  "title": "Mere Graph Studio Project V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "graph", "inputs", "sidecar"],
+  "properties": {
+    "contract_version": {
+      "const": "mere.run/graph-studio-project.v1"
+    },
+    "graph": {
+      "$ref": "workflow-graph.v1.schema.json"
+    },
+    "inputs": {
+      "type": "object"
+    },
+    "sidecar": {
+      "$ref": "workflow-editor-sidecar.v1.schema.json"
+    },
+    "program": {
+      "$ref": "workflow-program.v1.schema.json"
+    }
+  }
+}

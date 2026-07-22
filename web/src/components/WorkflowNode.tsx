@@ -1,0 +1,500 @@
+import { memo, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { AlertTriangle, Box, Braces, ChevronLeft, ChevronRight, Cpu, Download, Expand, FileText, Image, Layers, Link2, Lock, Music, ScanSearch, Sparkles, Type, Video, X, Zap } from 'lucide-react';
+
+import {
+  argumentPathHandle,
+  fieldTypeAtArgumentPath,
+  isGraphReference,
+  ORDER_INPUT_HANDLE,
+  ORDER_OUTPUT_HANDLE,
+} from '../graph';
+import { parseJsonValue } from '../decode';
+import { candidateModels, modelFieldFor } from '../models';
+import { argumentSummaries, categoryKey, friendlyType, portTypeKey, splitFieldsForMode, textValue, type StudioMode } from '../ui';
+import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
+import type {
+  CatalogEntry,
+  CatalogField,
+  CatalogValueSchema,
+  FieldType,
+  JsonValue,
+  WorkflowNode as WorkflowNodeValue,
+} from '../types';
+
+export interface WorkflowNodeData extends Record<string, unknown> {
+  value: WorkflowNodeValue;
+  entry?: CatalogEntry;
+  ordinal: number;
+  mode: StudioMode;
+  onArgumentChange?: (name: string, value: JsonValue | undefined) => void;
+  preview?: NodeRunPreview;
+  artifactBlob?: (runId: string, path: string, contentType?: string) => Promise<Blob>;
+  availableModels?: string[];
+  onRaceModels?: (nodeId: string, models: string[]) => void;
+  canInstallModels?: boolean;
+  onInstallModel?: (model: string) => void;
+}
+
+export type WorkflowFlowNode = Node<WorkflowNodeData, 'workflow'>;
+
+const categoryIcons = {
+  values: Braces,
+  text: Type,
+  audio: Music,
+  dataset: ScanSearch,
+  image: Image,
+  model: Cpu,
+  video: Video,
+  other: Sparkles,
+};
+
+interface NestedPort {
+  path: string[];
+  label: string;
+  type: FieldType;
+  value: JsonValue | undefined;
+}
+
+function nestedPorts(field: CatalogField, value: JsonValue | undefined): NestedPort[] {
+  const ports: NestedPort[] = [];
+  const visit = (
+    schema: CatalogValueSchema | undefined,
+    current: JsonValue | undefined,
+    path: string[],
+    label: string,
+  ) => {
+    if (!schema) return;
+    if (schema.type === 'array') {
+      if (Array.isArray(current)) {
+        current.forEach((item, index) => visit(schema.items, item, [...path, String(index)], `${label} ${index + 1}`));
+      }
+      return;
+    }
+    if (schema.type === 'object') {
+      const currentObject: Record<string, JsonValue> =
+        current && typeof current === 'object' && !Array.isArray(current) ? current : {};
+      const keys = new Set([...Object.keys(schema.properties ?? {}), ...Object.keys(currentObject)]);
+      for (const key of keys) {
+        visit(
+          schema.properties?.[key] ?? schema.additional_properties,
+          currentObject[key],
+          [...path, key],
+          key,
+        );
+      }
+      return;
+    }
+    const type = fieldTypeAtArgumentPath(field, path.slice(1));
+    if (type) ports.push({ path, label, type, value: current });
+  };
+  visit(field.value_schema, value, [field.name], field.name);
+  return ports;
+}
+
+interface MaterialEditorContentProps {
+  field: CatalogField;
+  value: WorkflowNodeValue;
+  current: JsonValue | undefined;
+  onArgumentChange: (name: string, value: JsonValue | undefined) => void;
+}
+
+const materialInputClass = 'material-input nodrag nowheel';
+
+function ChoiceMaterialEditor({ field, value, current, onArgumentChange }: MaterialEditorContentProps) {
+  const options = Array.isArray(value.arguments.options)
+    ? value.arguments.options.filter((item): item is string => typeof item === 'string')
+    : [];
+  return (
+    <select className={materialInputClass} value={textValue(current)} onChange={(event) => onArgumentChange(field.name, event.target.value)}>
+      {options.map((option) => <option key={option}>{option}</option>)}
+    </select>
+  );
+}
+
+function ScalarMaterialEditor({ field, value, current, onArgumentChange }: MaterialEditorContentProps) {
+  if (field.type === 'boolean') {
+    return (
+      <label className="material-switch nodrag">
+        <input type="checkbox" checked={Boolean(current)} onChange={(event) => onArgumentChange(field.name, event.target.checked)} />
+        <span>{current ? 'On' : 'Off'}</span>
+      </label>
+    );
+  }
+  if (field.type === 'integer' || field.type === 'number') {
+    return (
+      <input
+        className={materialInputClass}
+        type="number"
+        value={typeof current === 'number' ? current : ''}
+        onChange={(event) => {
+          if (!event.target.value && !field.required) onArgumentChange(field.name, undefined);
+          else {
+            const next = field.type === 'integer'
+              ? Number.parseInt(event.target.value, 10)
+              : Number(event.target.value);
+            if (Number.isFinite(next)) onArgumentChange(field.name, next);
+          }
+        }}
+      />
+    );
+  }
+  if (field.multiline || value.kind === 'text.template') {
+    return (
+      <textarea
+        className={materialInputClass}
+        rows={3}
+        value={typeof current === 'string' ? current : ''}
+        onChange={(event) => onArgumentChange(field.name, event.target.value)}
+      />
+    );
+  }
+  return <input className={materialInputClass} value={typeof current === 'string' ? current : ''} onChange={(event) => onArgumentChange(field.name, event.target.value)} />;
+}
+
+function StructuredMaterialEditor({ field, value, current, onArgumentChange }: MaterialEditorContentProps) {
+  if (field.type.startsWith('asset')) {
+    const connected = isGraphReference(current);
+    return (
+      <input
+        className={materialInputClass}
+        value={connected ? 'Connected media' : typeof current === 'string' ? current : ''}
+        disabled={connected}
+        placeholder="Choose or connect media"
+        onChange={(event) => onArgumentChange(field.name, event.target.value)}
+      />
+    );
+  }
+  if (value.kind === 'text.join' && Array.isArray(current)) {
+    return (
+      <div className="material-list">
+        {current.map((item, index) => (
+          <input
+            className={materialInputClass}
+            key={index}
+            value={typeof item === 'string' ? item : isGraphReference(item) ? 'Connected value' : ''}
+            disabled={isGraphReference(item)}
+            onChange={(event) => {
+              const next = [...current];
+              next[index] = event.target.value;
+              onArgumentChange(field.name, next);
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <textarea
+      className={materialInputClass}
+      rows={3}
+      defaultValue={JSON.stringify(current ?? {}, null, 2)}
+      onBlur={(event) => {
+        try {
+          onArgumentChange(field.name, parseJsonValue(event.target.value, 'node argument JSON'));
+        } catch {
+          // Keep the last valid document; the full inspector reports malformed JSON.
+        }
+      }}
+    />
+  );
+}
+
+function MaterialEditor({
+  entry,
+  value,
+  onArgumentChange,
+}: {
+  entry: CatalogEntry;
+  value: WorkflowNodeValue;
+  onArgumentChange?: (name: string, value: JsonValue | undefined) => void;
+}) {
+  const primaryName = entry.presentation?.primary_argument;
+  const field = entry.inputs.find((candidate) => candidate.name === primaryName);
+  if (!field || !onArgumentChange) return null;
+  const props = { field, value, current: value.arguments[field.name], onArgumentChange };
+  if (value.kind === 'choice.value') return <ChoiceMaterialEditor {...props} />;
+  if (field.type === 'boolean' || field.type === 'integer' || field.type === 'number' || field.type === 'string') {
+    return <ScalarMaterialEditor {...props} />;
+  }
+  return <StructuredMaterialEditor {...props} />;
+}
+
+function CanvasRunPreview({
+  preview,
+  artifactBlob,
+}: {
+  preview: NodeRunPreview;
+  artifactBlob?: WorkflowNodeData['artifactBlob'];
+}) {
+  const [index, setIndex] = useState(0);
+  const [url, setUrl] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const item = preview.items[Math.min(index, preview.items.length - 1)];
+  const artifact = item?.artifact;
+  useEffect(() => setIndex((current) => Math.min(current, Math.max(0, preview.items.length - 1))), [preview.items.length]);
+  useEffect(() => {
+    setIndex(0);
+    setExpanded(false);
+  }, [preview.runId]);
+  useEffect(() => {
+    setUrl(null);
+    if (!artifact || !artifactBlob) return undefined;
+    let live = true;
+    let objectUrl: string | null = null;
+    void artifactBlob(preview.runId, artifact.path, artifact.content_type).then((blob) => {
+      if (!live) return;
+      objectUrl = URL.createObjectURL(blob);
+      setUrl(objectUrl);
+    }).catch(() => {
+      if (live) setUrl(null);
+    });
+    return () => {
+      live = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [artifact, artifactBlob, preview.runId]);
+
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false);
+    };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [expanded]);
+
+  if (!item) return null;
+  const contentType = artifact?.content_type ?? '';
+  const previous = () => setIndex((current) => (current - 1 + preview.items.length) % preview.items.length);
+  const next = () => setIndex((current) => (current + 1) % preview.items.length);
+  const media = (current: NodeRunPreviewItem, mediaUrl: string | null, large = false) => {
+    if (current.value !== undefined) {
+      const text = typeof current.value === 'string' ? current.value : JSON.stringify(current.value, null, large ? 2 : undefined);
+      return <div className={`preview-scalar-value ${large ? 'large' : ''}`}><FileText size={large ? 18 : 12} /><span>{text}</span></div>;
+    }
+    if (!current.artifact) return null;
+    if (mediaUrl && contentType.startsWith('image/')) return <img src={mediaUrl} alt={current.artifact.name} />;
+    if (mediaUrl && contentType.startsWith('video/')) return <video src={mediaUrl} muted={!large} controls={large} autoPlay={large} playsInline />;
+    if (mediaUrl && contentType.startsWith('audio/')) return <audio src={mediaUrl} controls className="nodrag nowheel" />;
+    return <span className="preview-file"><Image size={13} /> {current.artifact.name}</span>;
+  };
+
+  return (
+    <>
+      <div className={`canvas-run-preview ${item.value !== undefined ? 'scalar' : 'artifact'}`} title={`Matching run ${preview.runId}`}>
+        {media(item, url)}
+        <div className="canvas-preview-bar">
+          <small>{item.outputName ?? artifact?.name ?? 'output'}</small>
+          <span>{index + 1} / {preview.items.length}</span>
+          {preview.items.length > 1 ? (
+            <>
+              <button className="nodrag" onClick={previous} aria-label="Previous generated output"><ChevronLeft size={12} /></button>
+              <button className="nodrag" onClick={next} aria-label="Next generated output"><ChevronRight size={12} /></button>
+            </>
+          ) : null}
+          <button className="nodrag" onClick={() => setExpanded(true)} aria-label="Open generated output"><Expand size={11} /></button>
+        </div>
+      </div>
+      {expanded ? createPortal(
+        <div className="canvas-preview-lightbox nodrag nowheel" role="dialog" aria-modal="true" aria-label="Generated output gallery" onMouseDown={() => setExpanded(false)}>
+          <button className="lightbox-close" onClick={() => setExpanded(false)} aria-label="Close gallery"><X size={18} /></button>
+          {preview.items.length > 1 ? <button className="lightbox-nav previous" onMouseDown={(event) => event.stopPropagation()} onClick={previous} aria-label="Previous output"><ChevronLeft size={24} /></button> : null}
+          <div className="lightbox-content" onMouseDown={(event) => event.stopPropagation()}>
+            {media(item, url, true)}
+            <footer>
+              <strong>{item.outputName ?? artifact?.name ?? 'output'}</strong>
+              <span>Generation {index + 1} of {preview.items.length} · run {preview.runId}</span>
+            </footer>
+          </div>
+          {preview.items.length > 1 ? <button className="lightbox-nav next" onMouseDown={(event) => event.stopPropagation()} onClick={next} aria-label="Next output"><ChevronRight size={24} /></button> : null}
+        </div>,
+        document.body,
+      ) : null}
+    </>
+  );
+}
+
+function visibleInputs(entry: CatalogEntry | undefined, value: WorkflowNodeValue, mode: StudioMode): CatalogField[] {
+  const allInputs = entry?.inputs ?? [];
+  if (mode === 'pro') return allInputs;
+  const names = new Set(splitFieldsForMode(allInputs, mode).primary.map((field) => field.name));
+  for (const field of allInputs) {
+    const nested = nestedPorts(field, value.arguments[field.name]);
+    if (isGraphReference(value.arguments[field.name]) || nested.some((port) => isGraphReference(port.value))) {
+      names.add(field.name);
+    }
+  }
+  return allInputs.filter((field) => names.has(field.name));
+}
+
+function InstallModelButton({ data, currentModel, missing }: {
+  data: WorkflowNodeData;
+  currentModel: JsonValue | undefined;
+  missing: boolean;
+}) {
+  if (!missing || !data.canInstallModels || !data.onInstallModel || typeof currentModel !== 'string') return null;
+  return <button
+    type="button"
+    className="node-model-install nodrag"
+    title={`Install ${currentModel}`}
+    aria-label={`Install ${currentModel}`}
+    onClick={() => data.onInstallModel?.(currentModel)}
+  ><Download size={11} /></button>;
+}
+
+function RaceModelsButton({ data, nodeId, models }: { data: WorkflowNodeData; nodeId: string; models: string[] }) {
+  if (!data.onRaceModels || models.length < 2) return null;
+  const raceModels = models.slice(0, 6);
+  return <button
+    type="button"
+    className="node-model-race nodrag"
+    title={`Race the first ${raceModels.length} models on your fleet`}
+    aria-label="Race models"
+    onClick={() => data.onRaceModels?.(nodeId, raceModels)}
+  ><Layers size={11} /></button>;
+}
+
+function NodeModelSelector({ data, entry, value }: {
+  data: WorkflowNodeData;
+  entry: CatalogEntry | undefined;
+  value: WorkflowNodeValue;
+}) {
+  const modelField = modelFieldFor(entry);
+  const currentModel = modelField ? value.arguments[modelField] : undefined;
+  const models = modelField ? candidateModels(entry, currentModel, data.availableModels) : [];
+  if (!modelField || !models.length) return null;
+  const available = data.availableModels ?? [];
+  const missing = typeof currentModel === 'string' && available.length > 0 && !available.includes(currentModel);
+  return <div className={`node-model nodrag ${missing ? 'missing' : ''}`}>
+    <span className="node-model-icon" title={missing ? `${String(currentModel)} is not installed on your fleet` : undefined}>
+      {missing ? <AlertTriangle size={11} /> : <Cpu size={11} />}
+    </span>
+    <select
+      className="nodrag"
+      value={typeof currentModel === 'string' ? currentModel : ''}
+      onChange={(event) => data.onArgumentChange?.(modelField, event.target.value)}
+      aria-label="Model"
+      title={`Model: ${typeof currentModel === 'string' ? currentModel : 'default'}`}
+    >
+      {typeof currentModel !== 'string' ? <option value="">default model</option> : null}
+      {models.map((model) => <option key={model} value={model}>{model}</option>)}
+    </select>
+    <InstallModelButton data={data} currentModel={currentModel} missing={missing} />
+    <RaceModelsButton data={data} nodeId={value.id} models={models} />
+  </div>;
+}
+
+function InputPort({ field, value, mode }: { field: CatalogField; value: WorkflowNodeValue; mode: StudioMode }) {
+  const nested = nestedPorts(field, value.arguments[field.name]);
+  const wired = isGraphReference(value.arguments[field.name]) || nested.some((port) => isGraphReference(port.value));
+  const required = field.required && !wired && value.arguments[field.name] === undefined;
+  return <div className="port-stack">
+    <div className={`port-row ${wired ? 'wired' : ''}`} title={mode === 'pro' ? `${field.name}: ${field.type}` : `${field.name} · ${friendlyType(field.type)}`}>
+      <Handle type="target" position={Position.Left} id={field.name} className={`port-handle t-${portTypeKey(field.type)} ${isGraphReference(value.arguments[field.name]) ? 'wired' : ''}`} />
+      <span className="port-name">{field.name}</span>
+      {required ? <b className="port-required" aria-label="required">●</b> : null}
+    </div>
+    {nested.map((port) => (
+      <div className={`port-row nested ${isGraphReference(port.value) ? 'wired' : ''}`} key={argumentPathHandle(port.path)}>
+        <Handle type="target" position={Position.Left} id={argumentPathHandle(port.path)} className={`port-handle t-${portTypeKey(port.type)} ${isGraphReference(port.value) ? 'wired' : ''}`} />
+        <span className="port-name">{port.label}</span>
+      </div>
+    ))}
+  </div>;
+}
+
+function NodePorts({ inputs, outputs, value, mode }: {
+  inputs: CatalogField[];
+  outputs: CatalogField[];
+  value: WorkflowNodeValue;
+  mode: StudioMode;
+}) {
+  return <div className="workflow-node-ports">
+    <div className="port-column inputs">
+      {inputs.map((field) => <InputPort field={field} value={value} mode={mode} key={field.name} />)}
+    </div>
+    <div className="port-column outputs">
+      {outputs.map((field) => (
+        <div className="port-row" key={field.name} title={mode === 'pro' ? `${field.name}: ${field.type}` : `${field.name} · ${friendlyType(field.type)}`}>
+          <span className="port-name">{field.name}</span>
+          <Handle type="source" position={Position.Right} id={field.name} className={`port-handle t-${portTypeKey(field.type)}`} />
+        </div>
+      ))}
+    </div>
+    {!inputs.length && !outputs.length ? <div className="node-empty-ports"><Box size={13} /> No ports</div> : null}
+  </div>;
+}
+
+function NodeSummaries({ value, entry, mode }: { value: WorkflowNodeValue; entry: CatalogEntry | undefined; mode: StudioMode }) {
+  const summaries = argumentSummaries(value, entry, mode === 'easy' ? 3 : 2);
+  if (!summaries.length) return null;
+  return <div className="node-params">
+    {summaries.map((summary) => (
+      <span className={`param-chip ${summary.kind}`} key={summary.name} title={`${summary.label}: ${summary.text}`}>
+        {summary.kind === 'secret' ? <Lock size={9} /> : summary.kind === 'reference' ? <Link2 size={9} /> : null}
+        <em>{summary.label}</em><span>{summary.text}</span>
+      </span>
+    ))}
+  </div>;
+}
+
+function NodeFooter({ entry, value, mode }: { entry: CatalogEntry | undefined; value: WorkflowNodeValue; mode: StudioMode }) {
+  if (mode !== 'pro') return null;
+  return <footer className="workflow-node-footer">
+    <span>{entry?.provider?.id ?? value.provider ?? 'mere.run'}</span>
+    {value.execution?.cache === 'never' ? <span className="footer-flag"><Zap size={9} /> uncached</span> : null}
+  </footer>;
+}
+
+function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
+  const { entry, value, ordinal, mode, onArgumentChange, preview, artifactBlob } = data;
+  const category = categoryKey(entry?.category);
+  const Icon = categoryIcons[category];
+  const allInputs = entry?.inputs ?? [];
+  const inputs = visibleInputs(entry, value, mode);
+  const hiddenInputCount = allInputs.length - inputs.length;
+  const outputs = entry?.outputs ?? [];
+
+  return (
+    <article className={`workflow-node cat-${category} ${selected ? 'selected' : ''}`}>
+      <span className="node-accent" aria-hidden />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id={ORDER_INPUT_HANDLE}
+        className="order-handle order-input"
+        title="Ordering dependency"
+      />
+      <header className="workflow-node-header">
+        <span className="node-kind-icon"><Icon size={15} strokeWidth={1.9} /></span>
+        <span className="node-heading">
+          <strong>{entry?.title ?? value.kind}</strong>
+          <small>{value.id}</small>
+        </span>
+        <span className="node-ordinal">{String(ordinal).padStart(2, '0')}</span>
+      </header>
+      <NodeModelSelector data={data} entry={entry} value={value} />
+      {entry?.presentation?.style === 'material' ? (
+        <div className="material-editor">
+          <MaterialEditor entry={entry} value={value} onArgumentChange={onArgumentChange} />
+        </div>
+      ) : null}
+      {preview ? <CanvasRunPreview preview={preview} artifactBlob={artifactBlob} /> : null}
+      <NodePorts inputs={inputs} outputs={outputs} value={value} mode={mode} />
+      {hiddenInputCount ? <div className="node-hidden-inputs">+ {hiddenInputCount} inputs in inspector</div> : null}
+      <NodeSummaries value={value} entry={entry} mode={mode} />
+      <NodeFooter entry={entry} value={value} mode={mode} />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id={ORDER_OUTPUT_HANDLE}
+        className="order-handle order-output"
+        title="Ordering dependency"
+      />
+    </article>
+  );
+}
+
+export const WorkflowNode = memo(WorkflowNodeView);

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Mere Graph Studio</title>
+  <defs>
+    <linearGradient id="shell" x1="28" y1="16" x2="228" y2="240" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182329"/>
+      <stop offset="0.58" stop-color="#0B1115"/>
+      <stop offset="1" stop-color="#070A0D"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="64" y1="70" x2="194" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#72E8B6"/>
+      <stop offset="0.58" stop-color="#54DDB7"/>
+      <stop offset="1" stop-color="#43C9E3"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="248" height="248" rx="61" fill="url(#shell)"/>
+  <rect x="4.75" y="4.75" width="246.5" height="246.5" rx="60.25" fill="none" stroke="#314047" stroke-width="1.5"/>
+  <path d="M71 180V76L128 129L185 76V180" fill="none" stroke="#040608" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M71 180V76L128 129L185 76V180" fill="none" stroke="url(#signal)" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="71" cy="76" r="24" fill="#090D11"/>
+  <circle cx="71" cy="76" r="15.5" fill="#0B1115" stroke="#A995FF" stroke-width="8.5"/>
+  <circle cx="71" cy="180" r="21.5" fill="#090D11"/>
+  <circle cx="71" cy="180" r="14" fill="#0B1115" stroke="#6FE6B4" stroke-width="7.5"/>
+  <circle cx="185" cy="180" r="21.5" fill="#090D11"/>
+  <circle cx="185" cy="180" r="14" fill="#0B1115" stroke="#43C9E3" stroke-width="7.5"/>
+  <circle cx="128" cy="129" r="2.5" fill="#D9FFF0"/>
+</svg>

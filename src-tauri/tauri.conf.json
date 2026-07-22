@@ -1,0 +1,59 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mere Graph Studio",
+  "version": "0.3.0",
+  "identifier": "run.mere.graphstudio",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm web:build",
+    "frontendDist": "../dist/desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Mere Graph Studio",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 650,
+        "center": true,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' customprotocol: asset:; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost blob: data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "shortDescription": "Author and operate portable mere.run workflow graphs.",
+    "longDescription": "Mere Graph Studio is the cross-platform visual authoring and operations app for portable mere.run workflow graphs.",
+    "resources": {
+      "../contracts/": "contracts/"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-"
+    },
+    "windows": {
+      "wix": {
+        "language": "en-US"
+      },
+      "nsis": {
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}
