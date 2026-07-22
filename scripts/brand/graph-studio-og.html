@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1200, initial-scale=1" />
+    <title>Mere Graph Studio social card</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
+      body {
+        color: #edf4f1;
+        background:
+          radial-gradient(circle at 80% 42%, rgba(67, 201, 227, .13), transparent 31%),
+          radial-gradient(circle at 68% 52%, rgba(84, 221, 183, .12), transparent 41%),
+          linear-gradient(145deg, #0b1115 0%, #070a0d 54%, #040607 100%);
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: radial-gradient(circle, rgba(146, 190, 178, .18) 1px, transparent 1.1px);
+        background-size: 24px 24px;
+        mask-image: linear-gradient(90deg, transparent 6%, rgba(0,0,0,.22) 42%, #000 100%);
+      }
+      body::after {
+        content: "";
+        position: absolute;
+        inset: 14px;
+        border: 1px solid rgba(139, 181, 170, .16);
+        border-radius: 22px;
+        pointer-events: none;
+      }
+      .frame { position: relative; width: 100%; height: 100%; padding: 54px 58px; }
+      .brand { display: flex; align-items: center; gap: 15px; }
+      .brand img { width: 54px; height: 54px; filter: drop-shadow(0 10px 25px rgba(60, 215, 177, .16)); }
+      .brand-copy { display: grid; gap: 1px; }
+      .brand-copy strong { font-size: 22px; letter-spacing: -.02em; }
+      .brand-copy span { color: #81928d; font-size: 14px; }
+      .copy { position: absolute; left: 58px; top: 180px; width: 520px; }
+      .eyebrow { display: flex; align-items: center; gap: 10px; color: #75dfb5; font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .18em; text-transform: uppercase; }
+      .eyebrow::before { content: ""; width: 23px; height: 2px; background: linear-gradient(90deg, #a995ff, #6fe6b4); }
+      h1 { margin: 23px 0 18px; font-size: 64px; line-height: .98; letter-spacing: -.055em; font-weight: 740; }
+      h1 em { color: transparent; background: linear-gradient(100deg, #73e8b6 10%, #43c9e3 72%); background-clip: text; font-style: normal; }
+      .summary { width: 465px; margin: 0; color: #9baba6; font-size: 19px; line-height: 1.5; letter-spacing: -.01em; }
+      .badges { display: flex; gap: 9px; margin-top: 34px; }
+      .badge { padding: 8px 11px; color: #afc0bb; border: 1px solid rgba(130, 167, 158, .2); border-radius: 999px; background: rgba(255,255,255,.025); font: 650 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; text-transform: uppercase; }
+      .stage { position: absolute; right: 30px; top: 92px; width: 590px; height: 480px; }
+      .stage::before { content: ""; position: absolute; inset: 33px 14px 13px 10px; border: 1px solid rgba(122, 158, 149, .09); border-radius: 24px; background: linear-gradient(180deg, rgba(17,24,28,.5), rgba(6,9,11,.18)); transform: perspective(900px) rotateY(-5deg) rotateX(2deg); }
+      .wires { position: absolute; inset: 0; overflow: visible; filter: drop-shadow(0 0 9px rgba(89, 230, 184, .7)); }
+      .wire-shadow { fill: none; stroke: #07100d; stroke-width: 11; stroke-linecap: round; }
+      .wire { fill: none; stroke: url(#wire-gradient); stroke-width: 4; stroke-linecap: round; }
+      .node { position: absolute; width: 190px; min-height: 174px; overflow: hidden; border: 1px solid rgba(147, 181, 172, .28); border-radius: 14px; background: linear-gradient(145deg, rgba(28,37,42,.96), rgba(12,17,21,.98)); box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.045); }
+      .node.one { left: 5px; top: 206px; }
+      .node.two { left: 207px; top: 102px; }
+      .node.three { left: 409px; top: 226px; width: 172px; }
+      .node-head { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid rgba(136, 168, 160, .14); }
+      .node-icon { width: 27px; height: 27px; display: grid; place-items: center; color: #77e8b9; border: 1px solid rgba(107, 232, 183, .45); border-radius: 7px; background: rgba(87, 219, 173, .08); font: 720 13px/1 ui-monospace, monospace; }
+      .node-title { display: grid; gap: 2px; min-width: 0; }
+      .node-title strong { font-size: 12px; }
+      .node-title small { color: #70817c; font: 9px/1 ui-monospace, monospace; }
+      .rows { display: grid; gap: 1px; padding: 8px 0; }
+      .row { height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 13px; color: #879892; font: 10px/1 ui-monospace, monospace; }
+      .port { width: 10px; height: 10px; border: 2px solid #53d9b0; border-radius: 50%; background: #10171a; box-shadow: 0 0 0 3px rgba(83,217,176,.09); }
+      .row:first-child { color: #c3d0cc; }
+      .node-foot { height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 13px; border-top: 1px solid rgba(136, 168, 160, .11); color: #6e817b; font: 9px/1 ui-monospace, monospace; }
+      .node-foot i { width: 5px; height: 5px; border-radius: 50%; background: #a995ff; box-shadow: 0 0 8px #a995ff; }
+      .signal { position: absolute; width: 16px; height: 16px; border: 4px solid #65e4b5; border-radius: 50%; background: #0b1115; box-shadow: 0 0 16px rgba(96,230,181,.65); }
+      .s1 { left: 188px; top: 247px; } .s2 { left: 390px; top: 207px; }
+      .footer { position: absolute; left: 58px; bottom: 45px; color: #63736e; font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .02em; }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <header class="brand">
+        <img src="../../web/public/brand/mark.svg" alt="" />
+        <div class="brand-copy"><strong>mere.run</strong><span>Graph Studio</span></div>
+      </header>
+      <section class="copy">
+        <div class="eyebrow">Open source workflow authoring</div>
+        <h1>Build the graph.<br /><em>Run it anywhere.</em></h1>
+        <p class="summary">Typed visual workflows for local AI—portable from desktop to SSH to your own compute fleet.</p>
+        <div class="badges"><span class="badge">MIT licensed</span><span class="badge">Graph v2</span><span class="badge">Local first</span></div>
+      </section>
+      <section class="stage" aria-label="Prompt, image generation, and output nodes connected on a workflow canvas">
+        <svg class="wires" viewBox="0 0 590 480" aria-hidden="true">
+          <defs><linearGradient id="wire-gradient"><stop stop-color="#6fe6b4"/><stop offset="1" stop-color="#43c9e3"/></linearGradient></defs>
+          <path class="wire-shadow" d="M195 255 C224 255 211 207 240 207"/>
+          <path class="wire" d="M195 255 C224 255 211 207 240 207"/>
+          <path class="wire-shadow" d="M397 207 C433 207 398 267 432 267"/>
+          <path class="wire" d="M397 207 C433 207 398 267 432 267"/>
+        </svg>
+        <article class="node one">
+          <div class="node-head"><span class="node-icon">T</span><span class="node-title"><strong>Prompt</strong><small>text.value</small></span></div>
+          <div class="rows"><div class="row"><span>value</span><span>“aurora over basalt”</span></div><div class="row"><span>out</span><span class="port"></span></div></div>
+          <div class="node-foot"><i></i> mere.run</div>
+        </article>
+        <article class="node two">
+          <div class="node-head"><span class="node-icon">◆</span><span class="node-title"><strong>Generate image</strong><small>image.generate</small></span></div>
+          <div class="rows"><div class="row"><span>prompt</span><span class="port"></span></div><div class="row"><span>model</span><span>flux</span></div></div>
+          <div class="node-foot"><i></i> typed · portable</div>
+        </article>
+        <article class="node three">
+          <div class="node-head"><span class="node-icon">↗</span><span class="node-title"><strong>Output</strong><small>asset</small></span></div>
+          <div class="rows"><div class="row"><span>image</span><span class="port"></span></div><div class="row"><span>format</span><span>png</span></div></div>
+          <div class="node-foot"><i></i> ready</div>
+        </article>
+        <span class="signal s1"></span><span class="signal s2"></span>
+      </section>
+      <footer class="footer">github.com/sawfwair/mere-run-graph-studio</footer>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,85 @@
+{
+  "name": "mere-run-graph-studio",
+  "version": "0.3.0",
+  "description": "Offline-first desktop and hosted authoring UI for portable mere.run workflow graphs",
+  "private": true,
+  "license": "MIT",
+  "author": "Sawfwair Inc. and mere.run contributors",
+  "homepage": "https://github.com/sawfwair/mere-run-graph-studio#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sawfwair/mere-run-graph-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sawfwair/mere-run-graph-studio/issues"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10.33.2"
+  },
+  "type": "module",
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "check": "./scripts/check.sh",
+    "preflight": "./scripts/preflight.sh",
+    "brand:render": "node scripts/render-brand-assets.mjs",
+    "complexity": "./scripts/complexity.sh",
+    "hooks:install": "./scripts/setup-hooks.sh",
+    "lint": "oxlint --type-aware --deny-warnings --report-unused-disable-directives cloud web/src web/harness web/*.ts",
+    "lint:fix": "pnpm lint --fix",
+    "dev": "vite --config web/vite.config.ts",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml --locked",
+    "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
+    "cloud:build": "pnpm cloud:check && vite build --config web/vite.cloud.config.ts",
+    "cloud:check": "tsc --noEmit -p cloud/tsconfig.json",
+    "cloud:dev": "pnpm cloud:build && wrangler dev --port 8788 --var STUDIO_ORIGIN:http://127.0.0.1:8788",
+    "cloud:deploy": "pnpm cloud:build && wrangler deploy",
+    "cloud:dry-run": "pnpm cloud:build && wrangler deploy --dry-run --outdir .wrangler/cloud-dry-run",
+    "cloud:test": "vitest run --config cloud/vitest.config.ts --coverage.enabled --coverage.provider=istanbul",
+    "cloud:test:coverage": "pnpm cloud:test",
+    "web:build": "pnpm web:check && vite build --config web/vite.config.ts",
+    "web:check": "tsc --noEmit -p web/tsconfig.json",
+    "web:test": "vitest run --config web/vitest.config.ts --coverage.enabled --coverage.provider=v8",
+    "web:test:coverage": "pnpm web:test",
+    "harness:check": "tsc --noEmit -p web/harness/tsconfig.json",
+    "harness": "vite --config web/harness/vite.config.ts",
+    "harness:shoot": "node web/harness/shoot.mjs",
+    "harness:test": "pnpm harness:check && pnpm harness:shoot"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@xyflow/react": "^12.11.2",
+    "jose": "^6.2.3",
+    "lucide-react": "^1.25.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.18.6",
+    "@cloudflare/workers-types": "^5.20260722.1",
+    "@tauri-apps/cli": "^2.11.0",
+    "@types/node": "24.13.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/coverage-istanbul": "4.1.10",
+    "@vitest/coverage-v8": "4.1.10",
+    "oxlint": "1.75.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "playwright": "^1.61.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.113.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "workerd"
+    ]
+  }
+}

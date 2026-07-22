@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "allow"
+  },
+  "rules": {
+    "complexity": ["error", { "max": 0, "variant": "classic" }]
+  },
+  "ignorePatterns": [
+    "cloud/dist/**",
+    "dist/**",
+    "node_modules/**",
+    "web/harness/shots/**"
+  ]
+}

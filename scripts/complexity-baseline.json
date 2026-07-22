@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "metric": "classic McCabe cyclomatic complexity",
+  "targetMaximum": 10,
+  "profile": {
+    "web/src/App.tsx": [17, 13, 11],
+    "web/src/components/AppView.tsx": [17],
+    "web/src/components/GraphCanvas.tsx": [13, 13],
+    "web/src/components/Inspector.tsx": [18, 14, 14],
+    "web/src/components/Library.tsx": [16],
+    "web/src/components/WorkflowNode.tsx": [16, 14, 14, 14, 13]
+  }
+}
