@@ -80,8 +80,9 @@ import {
 } from './graph';
 import { loadRecoveredDocument, useDocumentHistory } from './history';
 import { CloudRuntime } from './cloud-runtime';
-import { sha256Canonical } from './cloud-contract';
-import { nodePreviews, runMatchesSource } from './run-preview';
+import { captureRunSource } from './canvas-execution';
+import { useCanvasRun } from './use-canvas-run';
+import { CanvasRunBar } from './components/CanvasRunBar';
 import { decodeJsonObject, decodeWorkflowGraph, parseJsonValue, recordValue } from './decode';
 import {
   isNativeDesktop,
@@ -277,7 +278,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [runs, setRuns] = useState<StudioRun[]>([]);
   const [selectedRun, setSelectedRun] = useState<StudioRun | null>(null);
-  const [canvasRun, setCanvasRun] = useState<StudioRun | null>(null);
+  const canvas = useCanvasRun(graph, inputs, runs, runtime);
+  const trackCanvasRun = canvas.track;
+  const loadCanvasArtifact = useCallback((id: string, path: string, contentType?: string) => runtime.artifactBlob(id, path, contentType), [runtime]);
   const [variations, setVariations] = useState<AppVariation[]>([]);
   const [variationField, setVariationField] = useState<string | null>(null);
   const [variationBusy, setVariationBusy] = useState(false);
@@ -289,7 +292,6 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const [installPreflightError, setInstallPreflightError] = useState<string | null>(null);
   const [installPull, setInstallPull] = useState<ModelPull | null>(null);
   const [installStarting, setInstallStarting] = useState(false);
-  const runDetailCache = useRef(new Map<string, StudioRun>());
   const [preflightDocument, setPreflightDocument] = useState<CommandDocument<JsonValue> | null>(null);
   const [preflightComparisons, setPreflightComparisons] = useState<{
     executor: string;
@@ -365,48 +367,6 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     return () => { live = false; };
   }, [runtime]);
 
-  useEffect(() => {
-    if (selectedRun?.manifest) runDetailCache.current.set(selectedRun.id, selectedRun);
-  }, [selectedRun]);
-
-  useEffect(() => {
-    let live = true;
-    const timeout = window.setTimeout(() => {
-      void Promise.all([sha256Canonical(graph), sha256Canonical(inputs)]).then(async ([graphHash, inputHash]) => {
-        const candidates: StudioRun[] = [];
-        for (const summary of runs.filter((run) => run.state === 'finished').slice(0, 8)) {
-          const cached = runDetailCache.current.get(summary.id);
-          if (cached) {
-            candidates.push(cached);
-            continue;
-          }
-          try {
-            const detailed = await runtime.inspectRun(summary.id);
-            runDetailCache.current.set(summary.id, detailed);
-            candidates.push(detailed);
-          } catch {
-            // A disappearing or inaccessible historical run cannot provide a canvas preview.
-          }
-        }
-        if (selectedRun?.state === 'finished' && selectedRun.manifest
-          && !candidates.some((candidate) => candidate.id === selectedRun.id)) {
-          candidates.push(selectedRun);
-        }
-        if (live) {
-          setCanvasRun(candidates.find((run) => runMatchesSource(run, graphHash, inputHash)) ?? null);
-        }
-      }).catch(() => {
-        if (live) setCanvasRun(null);
-      });
-    }, 180);
-    return () => {
-      live = false;
-      window.clearTimeout(timeout);
-    };
-  }, [graph, inputs, runs, runtime, selectedRun]);
-
-  const canvasPreviews = useMemo(() => canvasRun ? nodePreviews(canvasRun) : {}, [canvasRun]);
-
   const refreshInstalledModels = useCallback(async () => {
     try {
       const executorDocument = await runtime.executors();
@@ -442,9 +402,17 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
   useEffect(() => { void loadEnvironment(); }, [loadEnvironment]);
 
+  useEffect(() => {
+    if (!canvas.run) return;
+    const update = canvas.run;
+    setRuns((current) => [update, ...current.filter((item) => item.id !== update.id)]);
+    setSelectedRun((current) => current?.id === update.id ? update : current);
+  }, [canvas.run]);
+
   const selectedRunId = selectedRun?.id;
   const selectedRunState = selectedRun?.state;
   useEffect(() => {
+    if (selectedRunId === canvas.runId) return undefined;
     if (!selectedRunId || !selectedRunState || !['starting', 'running', 'submitting', 'queued', 'assigned'].includes(selectedRunState)) return undefined;
     const controller = new AbortController();
     void runtime.watchRun(selectedRunId, (run) => {
@@ -454,7 +422,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       if (!controller.signal.aborted) showError('Run stream failed', error);
     });
     return () => controller.abort();
-  }, [runtime, selectedRunId, selectedRunState, showError]);
+  }, [runtime, selectedRunId, selectedRunState, showError, canvas.runId]);
 
   const updateSelectedNodeIds = useCallback((ids: string[]) => {
     setSelectedNodeIds((current) => (
@@ -762,6 +730,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   };
 
   const newWorkflow = () => {
+    canvas.reset();
     replaceDocument({ graph: createGraph(), inputs: {}, sidecar: createSidecar() }, true);
     setProjectPath(null);
     setSelectedNodeIds([]);
@@ -807,6 +776,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setBusy('Opening');
     try {
       const project = await runtime.loadProject(path);
+      canvas.reset();
       replaceDocument({ graph: project.graph, inputs: project.inputs, sidecar: project.sidecar, program: project.program }, true);
       setProjectPath(path);
       setSelectedNodeIds([]);
@@ -847,6 +817,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setBusy('Importing');
     try {
       const project = await runtime.importProject(parseJsonValue(await file.text(), file.name));
+      canvas.reset();
       replaceDocument(
         { graph: project.graph, inputs: project.inputs, sidecar: project.sidecar, program: project.program },
         false,
@@ -890,6 +861,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
   const applyTemplate = () => {
     if (!templateDraft) return;
+    canvas.reset();
     replaceDocument({ graph: templateDraft.graph, inputs: templateDraft.inputs, sidecar: templateDraft.sidecar }, false);
     setProjectPath(null);
     setSelectedNodeIds([]);
@@ -955,6 +927,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setBusy('Importing workflow');
     try {
       const imported = await runtime.importComfy(comfyWorkflow, comfyModel);
+      canvas.reset();
       replaceDocument({ graph: imported.graph, inputs: imported.inputs, sidecar: imported.sidecar }, false);
       setProjectPath(null);
       setSelectedNodeIds([]);
@@ -1030,18 +1003,20 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setBusy('Submitting');
     try {
       if (options?.executor && options.executor !== executor) setExecutor(options.executor);
+      const captured = await captureRunSource(graph, inputs);
       const run = await runtime.startRun(graph, inputs, target);
+      trackCanvasRun(run, captured);
       setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
       setSelectedRun(run);
       if (options?.keepView) setAppRunId(run.id);
-      else setView('runs');
+      else setView('canvas');
       pushToast('info', 'Run started', `${graph.name} on ${target}`);
     } catch (error) {
       showError('Run failed', error);
     } finally {
       setBusy(null);
     }
-  }, [executor, graph, inputs, pushToast, runtime, showError]);
+  }, [executor, graph, inputs, pushToast, runtime, showError, trackCanvasRun]);
 
   const appRunning = Boolean(
     appRunId && selectedRun?.id === appRunId
@@ -1214,6 +1189,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const resumeRun = async (id: string) => {
     try {
       const run = await runtime.resumeRun(id);
+      if (canvas.runId === id) trackCanvasRun(run);
       setSelectedRun(run);
       setRuns((current) => [run, ...current.filter((item) => item.id !== run.id)]);
     } catch (error) {
@@ -1223,7 +1199,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
   const retryRun = async (id: string) => {
     try {
-      setSelectedRun(await runtime.retryRun(id));
+      const run = await runtime.retryRun(id);
+      if (canvas.runId === id) trackCanvasRun(run);
+      setSelectedRun(run);
       await refreshRuns();
     } catch (error) {
       showError('Retry failed', error);
@@ -1527,7 +1505,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             graph={graph}
             inputs={inputs}
             sidecar={sidecar}
-            latestRun={canvasRun}
+            latestRun={canvas.matchingRun}
             running={appRunning || busy === 'Submitting'}
             variations={variations}
             variationField={variationField}
@@ -1549,6 +1527,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           />
         ) : view === 'canvas' ? ((() => (
           <div className="canvas-view">
+            <CanvasRunBar run={canvas.run} previous={!canvas.matches} error={canvas.streamError}
+              onCancel={canvas.cancel} onReconnect={canvas.reconnect}
+              onDetails={() => { if (canvas.run) setSelectedRun(canvas.run); setView('runs'); }} />
             <div className="canvas-context">
               <span><Workflow size={13} /> {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'} <i /> {edgeCount} {edgeCount === 1 ? 'connection' : 'connections'}</span>
               <button className="canvas-add" onClick={() => openPalette('nodes')}><Plus size={14} /> Add node</button>
@@ -1577,9 +1558,13 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               selectedInputName={selectedInputName}
               selectedOutputName={selectedOutputName}
               selectedEditorItemId={selectedEditorItemId}
-              previews={canvasPreviews}
+              previews={canvas.previews}
+              execution={canvas.execution}
+              pinnedPreviews={canvas.pins}
+              onPinPreview={canvas.pin}
+              onUnpinPreview={canvas.unpin}
               mode={mode}
-              artifactBlob={(id, path, contentType) => runtime.artifactBlob(id, path, contentType)}
+              artifactBlob={loadCanvasArtifact}
               inputAssetBlob={(path, contentType) => runtime.inputAssetBlob(path, contentType)}
               availableModels={installedOnTarget}
               onRaceModels={(nodeId, models) => void runModelRace(nodeId, models)}

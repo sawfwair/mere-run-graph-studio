@@ -1,7 +1,6 @@
-import { memo, useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { memo } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
-import { AlertTriangle, Box, Braces, ChevronLeft, ChevronRight, Cpu, Download, Expand, FileText, Image, Layers, Link2, Lock, Music, ScanSearch, Sparkles, Type, Video, X, Zap } from 'lucide-react';
+import { AlertTriangle, Box, Braces, Cpu, Download, Image, Layers, Link2, Lock, Music, ScanSearch, Sparkles, Type, Video, Zap } from 'lucide-react';
 
 import {
   argumentPathHandle,
@@ -13,7 +12,10 @@ import {
 import { parseJsonValue } from '../decode';
 import { candidateModels, modelFieldFor } from '../models';
 import { argumentSummaries, categoryKey, categoryTitle, friendlyLabel, friendlyType, portTypeKey, splitFieldsForMode, textValue, type StudioMode } from '../ui';
-import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
+import type { NodeRunPreview } from '../run-preview';
+import type { NodeExecutionState } from '../canvas-execution';
+import { NodeExecution } from './CanvasRunBar';
+import { NodeOutputPanel } from './NodeOutputPanel';
 import type {
   CatalogEntry,
   CatalogField,
@@ -30,6 +32,10 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   mode: StudioMode;
   onArgumentChange?: (name: string, value: JsonValue | undefined) => void;
   preview?: NodeRunPreview;
+  execution?: NodeExecutionState;
+  pinnedPreview?: NodeRunPreview;
+  onPinPreview?: () => void;
+  onUnpinPreview?: () => void;
   artifactBlob?: (runId: string, path: string, contentType?: string) => Promise<Blob>;
   availableModels?: string[];
   onRaceModels?: (nodeId: string, models: string[]) => void;
@@ -219,101 +225,6 @@ function MaterialEditor({
     return <ScalarMaterialEditor {...props} />;
   }
   return <StructuredMaterialEditor {...props} />;
-}
-
-function CanvasRunPreview({
-  preview,
-  artifactBlob,
-}: {
-  preview: NodeRunPreview;
-  artifactBlob?: WorkflowNodeData['artifactBlob'];
-}) {
-  const [index, setIndex] = useState(0);
-  const [url, setUrl] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const item = preview.items[Math.min(index, preview.items.length - 1)];
-  const artifact = item?.artifact;
-  useEffect(() => setIndex((current) => Math.min(current, Math.max(0, preview.items.length - 1))), [preview.items.length]);
-  useEffect(() => {
-    setIndex(0);
-    setExpanded(false);
-  }, [preview.runId]);
-  useEffect(() => {
-    setUrl(null);
-    if (!artifact || !artifactBlob) return undefined;
-    let live = true;
-    let objectUrl: string | null = null;
-    void artifactBlob(preview.runId, artifact.path, artifact.content_type).then((blob) => {
-      if (!live) return;
-      objectUrl = URL.createObjectURL(blob);
-      setUrl(objectUrl);
-    }).catch(() => {
-      if (live) setUrl(null);
-    });
-    return () => {
-      live = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [artifact, artifactBlob, preview.runId]);
-
-  useEffect(() => {
-    if (!expanded) return undefined;
-    const close = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setExpanded(false);
-    };
-    window.addEventListener('keydown', close);
-    return () => window.removeEventListener('keydown', close);
-  }, [expanded]);
-
-  if (!item) return null;
-  const contentType = artifact?.content_type ?? '';
-  const previous = () => setIndex((current) => (current - 1 + preview.items.length) % preview.items.length);
-  const next = () => setIndex((current) => (current + 1) % preview.items.length);
-  const media = (current: NodeRunPreviewItem, mediaUrl: string | null, large = false) => {
-    if (current.value !== undefined) {
-      const text = typeof current.value === 'string' ? current.value : JSON.stringify(current.value, null, large ? 2 : undefined);
-      return <div className={`preview-scalar-value ${large ? 'large' : ''}`}><FileText size={large ? 18 : 12} /><span>{text}</span></div>;
-    }
-    if (!current.artifact) return null;
-    if (mediaUrl && contentType.startsWith('image/')) return <img src={mediaUrl} alt={current.artifact.name} />;
-    if (mediaUrl && contentType.startsWith('video/')) return <video src={mediaUrl} muted={!large} controls={large} autoPlay={large} playsInline />;
-    if (mediaUrl && contentType.startsWith('audio/')) return <audio src={mediaUrl} controls className="nodrag nowheel" />;
-    return <span className="preview-file"><Image size={13} /> {current.artifact.name}</span>;
-  };
-
-  return (
-    <>
-      <div className={`canvas-run-preview ${item.value !== undefined ? 'scalar' : 'artifact'}`} title={`Preview from run ${preview.runId}`}>
-        {media(item, url)}
-        <div className="canvas-preview-bar">
-          <small>{item.outputName ?? artifact?.name ?? 'output'}</small>
-          <span>{index + 1} / {preview.items.length}</span>
-          {preview.items.length > 1 ? (
-            <>
-              <button className="nodrag" onClick={previous} aria-label="Previous generated output"><ChevronLeft size={12} /></button>
-              <button className="nodrag" onClick={next} aria-label="Next generated output"><ChevronRight size={12} /></button>
-            </>
-          ) : null}
-          <button className="nodrag" onClick={() => setExpanded(true)} aria-label="Open generated output"><Expand size={11} /></button>
-        </div>
-      </div>
-      {expanded ? createPortal(
-        <div className="canvas-preview-lightbox nodrag nowheel" role="dialog" aria-modal="true" aria-label="Generated output gallery" onMouseDown={() => setExpanded(false)}>
-          <button className="lightbox-close" onClick={() => setExpanded(false)} aria-label="Close gallery"><X size={18} /></button>
-          {preview.items.length > 1 ? <button className="lightbox-nav previous" onMouseDown={(event) => event.stopPropagation()} onClick={previous} aria-label="Previous output"><ChevronLeft size={24} /></button> : null}
-          <div className="lightbox-content" onMouseDown={(event) => event.stopPropagation()}>
-            {media(item, url, true)}
-            <footer>
-              <strong>{item.outputName ?? artifact?.name ?? 'output'}</strong>
-              <span>Output {index + 1} of {preview.items.length} · run {preview.runId}</span>
-            </footer>
-          </div>
-          {preview.items.length > 1 ? <button className="lightbox-nav next" onMouseDown={(event) => event.stopPropagation()} onClick={next} aria-label="Next output"><ChevronRight size={24} /></button> : null}
-        </div>,
-        document.body,
-      ) : null}
-    </>
-  );
 }
 
 function visibleInputs(entry: CatalogEntry | undefined, value: WorkflowNodeValue, mode: StudioMode): CatalogField[] {
@@ -513,6 +424,7 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
         </span>
         <span className="node-ordinal" title={`Node ${ordinal}`}><span>Node</span>{String(ordinal).padStart(2, '0')}</span>
       </header>
+      <NodeExecution execution={data.execution} />
       <NodePrompt data={data} />
       <NodeModelSelector data={data} entry={entry} value={value} />
       {entry?.presentation?.style === 'material' ? (
@@ -520,7 +432,7 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
           <MaterialEditor entry={entry} value={value} onArgumentChange={onArgumentChange} />
         </div>
       ) : null}
-      {preview ? <CanvasRunPreview preview={preview} artifactBlob={artifactBlob} /> : null}
+      <NodeOutputPanel preview={preview} pinned={data.pinnedPreview} artifactBlob={artifactBlob} onPin={data.onPinPreview} onUnpin={data.onUnpinPreview} />
       <NodePorts inputs={inputs} outputs={outputs} value={value} mode={mode} />
       {hiddenInputCount ? <div className="node-hidden-inputs">{hiddenInputsLabel(hiddenInputCount)}</div> : null}
       <NodeSummaries value={value} entry={entry} mode={mode} />

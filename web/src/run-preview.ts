@@ -1,3 +1,4 @@
+import type { OutputContext } from './canvas-execution';
 import type { JsonObject, JsonValue, RunArtifact, StudioRun } from './types';
 
 export interface NodeRunPreviewItem {
@@ -10,6 +11,10 @@ export interface NodeRunPreview {
   runId: string;
   state: string;
   items: NodeRunPreviewItem[];
+  context?: OutputContext;
+  previous?: boolean;
+  intermediate?: boolean;
+  updatedAt?: string;
 }
 
 function record(value: JsonValue | undefined): JsonObject | null {
@@ -50,7 +55,7 @@ function previewItems(node: JsonObject): NodeRunPreviewItem[] {
   const seenPaths = new Set<string>();
   for (const output of records(node.outputs)) {
     const outputName = optionalString(output.name);
-    if (output.value !== undefined && output.value !== null) items.push({ outputName, value: output.value });
+    if (output.value !== undefined) items.push({ outputName, value: output.value });
     const artifact = artifactItem(output, outputName);
     if (!artifact?.artifact) continue;
     seenPaths.add(artifact.artifact.path);
@@ -75,14 +80,42 @@ export function runMatchesSource(
     && manifest?.source_input_fingerprint === inputFingerprint;
 }
 
-export function nodePreviews(run: StudioRun): Record<string, NodeRunPreview> {
-  const manifest = record(run.manifest);
+function manifestPreviews(run: StudioRun): Record<string, NodeRunPreview> {
   const previews: Record<string, NodeRunPreview> = {};
-  for (const node of records(manifest?.nodes)) {
+  for (const node of records(record(run.manifest)?.nodes)) {
     const id = optionalString(node.id);
-    if (!id || node.state !== 'finished') continue;
+    if (!id) continue;
     const items = previewItems(node);
-    if (items.length) previews[id] = { runId: run.id, state: String(node.state), items };
+    if (items.length) previews[id] = { runId: run.id, state: optionalString(node.state) ?? 'running', items };
+  }
+  return previews;
+}
+function eventArtifact(value: JsonValue | undefined): NodeRunPreviewItem | null {
+  const raw = record(value);
+  return raw ? artifactItem(raw) : null;
+}
+function eventPreviews(run: StudioRun): Record<string, NodeRunPreview> {
+  const previews: Record<string, NodeRunPreview> = {};
+  for (const event of run.events ?? []) {
+    if (!event.node_id || !['artifact_ready', 'preview_ready'].includes(event.type ?? '')) continue;
+    const item = eventArtifact(event.artifact);
+    if (!item) continue;
+    previews[event.node_id] = { runId: run.id, state: event.state ?? 'running', items: [item],
+      intermediate: event.type === 'preview_ready', updatedAt: String(event.sequence ?? optionalString(event.created_at) ?? '') };
+  }
+  return previews;
+}
+function hostedArtifact(item: NodeRunPreviewItem, run: StudioRun): NodeRunPreviewItem {
+  const asset = item.artifact;
+  if (!asset) return item;
+  const hosted = run.artifacts?.find((candidate) => candidate.name === asset.path
+    || candidate.name === asset.name || (asset.sha256 && candidate.sha256 === asset.sha256));
+  return hosted ? { ...item, artifact: hosted } : item;
+}
+export function nodePreviews(run: StudioRun): Record<string, NodeRunPreview> {
+  const previews = { ...eventPreviews(run), ...manifestPreviews(run) };
+  if (run.remote_reference) {
+    for (const preview of Object.values(previews)) preview.items = preview.items.map((item) => hostedArtifact(item, run));
   }
   return previews;
 }

@@ -40,6 +40,26 @@ video generation, provider-free typed graphs, project persistence, preflight,
 submission, events, cancellation, retry, manifests, and artifacts use the
 hosted path.
 
+## Canvas runs
+
+Starting a run keeps the canvas open. Each node shows its reported state,
+elapsed time, and inference phase. A progress bar appears only when the
+executor reports a fraction or a current and total count. Use **Cancel run**
+to request cancellation or **Run details** to inspect events and diagnostics.
+If updates disconnect, use **Reconnect** to check the run again.
+
+Outputs appear as the executor publishes previews, artifacts, or node results.
+Completed upstream outputs remain available if a later node fails. Availability
+depends on the executor: workers that upload artifacts after the whole run
+finishes cannot provide early media. Studio retries unavailable artifacts and
+provides **Retry preview** for a manual retry.
+
+Use **Pin output** on a completed node to keep its result for comparison with
+a later run. **Compare outputs** shows both results and their recorded prompt,
+model, seed, and run ID. Settings that were not captured are labeled accordingly.
+Pins last for the current session and clear when you open another workflow.
+Editing the workflow or inputs labels existing output **Previous run**.
+
 ## Deployment order
 
 1. Register `mererun-studio` and its exact callbacks in Mere World.

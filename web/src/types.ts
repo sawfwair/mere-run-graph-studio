@@ -260,7 +260,7 @@ export interface RunEvent {
   phase?: string;
   state?: string;
   node_id?: string;
-  progress?: number;
+  progress?: JsonObject | number;
   metric?: JsonValue;
 }
 
