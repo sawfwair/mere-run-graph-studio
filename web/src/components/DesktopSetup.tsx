@@ -19,8 +19,8 @@ function SetupHeading({ status, settings, onCancel }: Pick<DesktopSetupProps, 's
       <span className="setup-mark"><Network size={28} /></span>
       <div>
         <span className="setup-eyebrow">Mere Graph Studio {status.app_version}</span>
-        <h1 id="setup-title">{settings ? 'Desktop settings' : 'Build portable AI workflows visually.'}</h1>
-        <p>{settings ? 'Choose the local workspace and public Mere command-line tools used by this desktop app.' : `Native on ${status.platform} ${status.architecture}. Your graphs and run records stay in a local workspace.`}</p>
+        <h1 id="setup-title">{settings ? 'Desktop settings' : 'Set up Graph Studio'}</h1>
+        <p>{settings ? 'Choose a workspace folder and the command-line tools that Graph Studio uses.' : `Graph Studio runs on ${status.platform} ${status.architecture}. Your workspace stores workflows and run records on this computer.`}</p>
       </div>
       {onCancel ? <button className="icon-button setup-close" onClick={onCancel} title="Close settings" aria-label="Close settings"><X size={16} /></button> : null}
     </div>
@@ -50,8 +50,8 @@ function CommandPathField({ title, description, path, placeholder, available, co
 }
 
 function submitLabel(saving: boolean, settings: boolean): string {
-  if (saving) return 'Checking…';
-  return settings ? 'Save settings' : 'Open Studio';
+  if (saving) return 'Checking configuration';
+  return settings ? 'Save settings' : 'Open Graph Studio';
 }
 
 function SetupFooter({ saving, settings, workspace, mereRun, onSubmit }: {
@@ -63,7 +63,7 @@ function SetupFooter({ saving, settings, workspace, mereRun, onSubmit }: {
 }) {
   return (
     <footer className="setup-footer">
-      <div><strong>Local-first by design</strong><small>Studio invokes fixed public commands. Secret values are never stored in graph documents.</small></div>
+      <div><strong>Local workspace</strong><small>Graph Studio uses the mere.run command-line tools. Workflows store secret reference names, not secret values.</small></div>
       <button className="command-button primary setup-continue" disabled={saving || !workspace.trim() || !mereRun.trim()} onClick={onSubmit}>
         {submitLabel(saving, settings)}
       </button>
@@ -106,11 +106,11 @@ export function DesktopSetup({ status, settings = false, saving, error, onSave, 
 
         <div className="setup-grid">
           <label className="setup-field">
-            <span><HardDrive size={16} /><strong>Workspace</strong><small>Projects, sidecars, and run records</small></span>
+            <span><HardDrive size={16} /><strong>Workspace</strong><small>Projects, editor settings, and run records</small></span>
             <div><input value={workspace} onChange={(event) => setWorkspace(event.target.value)} /><button onClick={() => void chooseWorkspace()} type="button"><FolderOpen size={15} /> Choose</button></div>
           </label>
-          <CommandPathField title="mere.run" description="Required runtime and execution authority" path={mereRun} placeholder="Select the mere.run executable" available={status.mere_run.available} configuredPath={status.mere_run.path} version={status.mere_run.version} onPath={setMereRun} onChoose={() => void chooseCommand('Choose the mere.run executable', setMereRun)} />
-          <CommandPathField title="Workflow tools" description="Optional templates, programs, and Comfy import" path={workflowTools} placeholder="Optional mere-dataset-tools executable" available={status.workflow_tools.available} configuredPath={status.workflow_tools.path} version={status.workflow_tools.version} optional onPath={setWorkflowTools} onChoose={() => void chooseCommand('Choose workflow tools', setWorkflowTools)} />
+          <CommandPathField title="mere.run" description="Required to validate and run workflows" path={mereRun} placeholder="Select the mere.run executable" available={status.mere_run.available} configuredPath={status.mere_run.path} version={status.mere_run.version} onPath={setMereRun} onChoose={() => void chooseCommand('Choose the mere.run executable', setMereRun)} />
+          <CommandPathField title="Workflow tools" description="Optional support for templates, programs, and ComfyUI import" path={workflowTools} placeholder="Optional mere-dataset-tools executable" available={status.workflow_tools.available} configuredPath={status.workflow_tools.path} version={status.workflow_tools.version} optional onPath={setWorkflowTools} onChoose={() => void chooseCommand('Choose workflow tools', setWorkflowTools)} />
         </div>
 
         {error ? <div className="setup-error" role="alert">{error}</div> : null}

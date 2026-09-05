@@ -86,7 +86,7 @@ function GraphInputNodeView({ data, selected }: NodeProps<GraphInputFlowNode>) {
         <span className="graph-input-icon"><Icon size={15} /></span>
         <span>
           <strong>{name}</strong>
-          <small>Input · {friendlyType(definition.type)}</small>
+          <small>Workflow input · {friendlyType(definition.type)}</small>
         </span>
       </header>
       {isAsset && path && assetBlob ? (
@@ -95,7 +95,7 @@ function GraphInputNodeView({ data, selected }: NodeProps<GraphInputFlowNode>) {
           <span title={path}>{filename}</span>
         </div>
       ) : (
-        <p title={summarizeValue(value, 120)}>{summarizeValue(value, 72)}</p>
+        <p title={summarizeValue(value, 120)}>{value === undefined ? 'No value provided' : summarizeValue(value, 72)}</p>
       )}
       <Handle
         type="source"

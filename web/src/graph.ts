@@ -37,6 +37,9 @@ export const createSidecar = (): EditorSidecar => ({
   promotions: {},
 });
 
+export const EDITOR_COLUMN_SPACING = 420;
+export const EDITOR_ROW_SPACING = 520;
+
 export const ORDER_INPUT_HANDLE = '__order-in';
 export const ORDER_OUTPUT_HANDLE = '__order-out';
 export const GRAPH_OUTPUT_HANDLE = '__graph-output';
@@ -199,8 +202,8 @@ export function layoutEditorNodes(sidecar: EditorSidecar, nodeIds: string[]): Ed
     if (!current) return;
     next.nodes[nodeId] = {
       ...current,
-      x: originX + (index % columns) * 336,
-      y: originY + Math.floor(index / columns) * 240,
+      x: originX + (index % columns) * EDITOR_COLUMN_SPACING,
+      y: originY + Math.floor(index / columns) * EDITOR_ROW_SPACING,
     };
   });
   return next;
@@ -232,7 +235,7 @@ function positionGraphNodes(next: EditorSidecar, graph: WorkflowGraph, layers: M
   for (const node of graph.nodes) {
     const layer = layers.get(node.id) ?? 0;
     const row = rows.get(layer) ?? 0;
-    next.nodes[node.id] = { ...next.nodes[node.id], x: originX + layer * 352, y: 80 + row * 240 };
+    next.nodes[node.id] = { ...next.nodes[node.id], x: originX + layer * EDITOR_COLUMN_SPACING, y: 80 + row * EDITOR_ROW_SPACING };
     rows.set(layer, row + 1);
   }
 }
@@ -243,8 +246,8 @@ function positionGraphOutputs(next: EditorSidecar, graph: WorkflowGraph, layers:
     const match = /^nodes\.([a-z][a-z0-9-]*)\.outputs\./.exec(reference.$ref);
     const source = match ? next.nodes[match[1]] : undefined;
     next.outputs![name] = source
-      ? { ...next.outputs![name], x: source.x + 352, y: source.y }
-      : { ...next.outputs![name], x: originX + (Math.max(...layers.values(), 0) + 1) * 352, y: 80 + index * 88 };
+      ? { ...next.outputs![name], x: source.x + EDITOR_COLUMN_SPACING, y: source.y }
+      : { ...next.outputs![name], x: originX + (Math.max(...layers.values(), 0) + 1) * EDITOR_COLUMN_SPACING, y: 80 + index * 112 };
   });
 }
 
@@ -278,8 +281,8 @@ export function addEditorGroup(sidecar: EditorSidecar, nodeIds: string[]): { sid
       title: `Group ${Object.keys(next.groups ?? {}).length + 1}`,
       x: minX - 28,
       y: minY - 54,
-      width: Math.max(342, maxX - minX + 342),
-      height: Math.max(250, maxY - minY + 310),
+      width: Math.max(384, maxX - minX + 384),
+      height: Math.max(574, maxY - minY + 574),
       node_ids: [...nodeIds],
       color: '#5F8F7B',
     },
@@ -293,7 +296,7 @@ export function addEditorNote(sidecar: EditorSidecar): { sidecar: EditorSidecar;
   const index = Object.keys(next.notes ?? {}).length;
   const nodePositions = Object.values(next.nodes);
   const originX = nodePositions.length ? Math.min(...nodePositions.map((value) => value.x)) : 96;
-  const originY = nodePositions.length ? Math.max(...nodePositions.map((value) => value.y)) + 320 : 96;
+  const originY = nodePositions.length ? Math.max(...nodePositions.map((value) => value.y)) + EDITOR_ROW_SPACING : 96;
   next.notes = {
     ...next.notes,
     [name]: {
@@ -334,8 +337,8 @@ export function addCatalogNode(
   nextGraph.nodes.push(node);
   const index = nextGraph.nodes.length - 1;
   nextSidecar.nodes[nodeId] = {
-    x: 80 + (index % 3) * 320,
-    y: 80 + Math.floor(index / 3) * 210,
+    x: 80 + (index % 3) * EDITOR_COLUMN_SPACING,
+    y: 80 + Math.floor(index / 3) * EDITOR_ROW_SPACING,
   };
   return { graph: nextGraph, sidecar: nextSidecar, nodeId };
 }

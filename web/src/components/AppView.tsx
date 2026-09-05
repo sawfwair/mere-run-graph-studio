@@ -172,14 +172,14 @@ function AppHeader({ title, tagline, fieldCount, showSettings, onToggleSettings,
       <div className="app-identity">
         <span className="app-badge"><Sparkles size={16} /></span>
         <div>
-          <h1>{title}</h1>
-          <p>{tagline || `${fieldCount} ${fieldCount === 1 ? 'input' : 'inputs'} · runs on your fleet`}</p>
+          <h2>{title}</h2>
+          <p>{tagline || `${fieldCount} workflow ${fieldCount === 1 ? 'input' : 'inputs'}`}</p>
         </div>
       </div>
       <div className="app-head-actions">
         <button className="icon-button small" title="App settings" aria-label="App settings" aria-pressed={showSettings} onClick={onToggleSettings}><Settings2 size={15} /></button>
         <button className="icon-button small" title="Edit the graph" aria-label="Edit the graph" onClick={onEditGraph}><Pencil size={15} /></button>
-        <button className="icon-button small" title="Share as a portable file" aria-label="Share app" onClick={onShare}><Share2 size={15} /></button>
+        <button className="icon-button small" title="Export the app as a project file" aria-label="Export app" onClick={onShare}><Share2 size={15} /></button>
       </div>
     </header>
   );
@@ -192,7 +192,7 @@ function MissingModelsBanner({ missingModels, modelRoute, canInstallModels, onIn
     <div className="app-missing" role="status">
       <span className="app-missing-icon"><AlertTriangle size={15} /></span>
       <div className="app-missing-body">
-        <strong>{missingModels.length === 1 ? 'This graph uses a model you haven’t installed' : `This graph uses ${missingModels.length} models you haven’t installed`}</strong>
+        <strong>{missingModels.length === 1 ? 'A model is missing from the selected executor' : `${missingModels.length} models are missing from the selected executor`}</strong>
         <p title={missingModels.join(', ')}>{missingModels.join(', ')}</p>
         <span className="app-missing-hint">Run anyway to let preflight decide, swap it on the canvas, or run where it’s installed.</span>
       </div>
@@ -227,8 +227,8 @@ function AppSettingsRow({ name, config, patchField, moveField }: {
       <FieldLockButton locked={locked} onClick={() => patchField(name, { locked: !locked })} />
       <input className="app-settings-label" value={config?.label ?? ''} placeholder={name} onChange={(event) => patchField(name, { label: event.target.value })} />
       <div className="app-settings-move">
-        <button className="icon-button tiny" title="Move up" aria-label="Move field up" onClick={() => moveField(name, -1)}><ChevronUp size={13} /></button>
-        <button className="icon-button tiny" title="Move down" aria-label="Move field down" onClick={() => moveField(name, 1)}><ChevronDown size={13} /></button>
+        <button className="icon-button tiny" title="Move field earlier" aria-label="Move field earlier" onClick={() => moveField(name, -1)}><ChevronUp size={13} /></button>
+        <button className="icon-button tiny" title="Move field later" aria-label="Move field later" onClick={() => moveField(name, 1)}><ChevronDown size={13} /></button>
       </div>
     </div>
   );
@@ -261,12 +261,12 @@ function AppSettings({ visible, graph, sidecar, title, patchApp, patchField, mov
         <input value={sidecar.app?.title ?? ''} placeholder={title} onChange={(event) => patchApp((config) => ({ ...config, title: event.target.value }))} />
       </label>
       <label className="field"><span>Tagline</span>
-        <input value={sidecar.app?.tagline ?? ''} placeholder="What this app makes" onChange={(event) => patchApp((config) => ({ ...config, tagline: event.target.value }))} />
+        <input value={sidecar.app?.tagline ?? ''} placeholder="Describe the output" onChange={(event) => patchApp((config) => ({ ...config, tagline: event.target.value }))} />
       </label>
       <div className="app-settings-fields">
         <span className="app-settings-legend">Fields</span>
         {names.map((name) => <AppSettingsRow key={name} name={name} config={sidecar.app?.fields?.[name]} patchField={patchField} moveField={moveField} />)}
-        {!names.length ? <p className="app-empty-hint">Add graph inputs on the canvas to expose fields here.</p> : null}
+        {!names.length ? <p className="app-empty-hint">To add form fields, create workflow inputs on the canvas.</p> : null}
       </div>
     </section>
   );
@@ -285,8 +285,8 @@ function AppFields({ fields, inputs, onValue, inputAssetBlob, onEditGraph }: {
       {!fields.length ? (
         <div className="app-no-fields">
           <Layers size={20} />
-          <p>No inputs are exposed yet.</p>
-          <button className="command-button" onClick={onEditGraph}><Pencil size={13} /> Add inputs on the canvas</button>
+          <p>This workflow has no inputs.</p>
+          <button className="command-button" onClick={onEditGraph}><Pencil size={13} /> Edit workflow inputs</button>
         </div>
       ) : null}
     </div>
@@ -308,11 +308,11 @@ function AppRunDock({ busy, running, candidates, sweepName, sweepCount, sweepCan
   return (
     <div className="app-run-dock">
       <button className="command-button primary app-run" disabled={busy} onClick={onRun}>
-        <Play size={14} fill="currentColor" /> {running ? 'Running…' : 'Run'}
+        <Play size={14} fill="currentColor" /> {running ? 'Running' : 'Run'}
       </button>
       {candidates.length ? (
         <div className="app-sweep">
-          <span className="app-sweep-label" title="Generate many at once — free on your own GPUs">Variations</span>
+          <span className="app-sweep-label" title="Run the workflow with a different value for each variation">Variations</span>
           <select value={sweepName} onChange={(event) => onSweepName(event.target.value)} aria-label="Dimension to vary">
             {candidates.map((candidate) => <option key={candidate.name} value={candidate.name}>{candidate.label}</option>)}
           </select>
@@ -354,8 +354,8 @@ function AppResultsPane({ variations, graph, variationField, outputs, latestRun,
   return (
     <div className="app-result-pane"><div className="app-results-empty">
       <span className="app-empty-badge">{running ? <span className="app-spinner" /> : <Play size={22} />}</span>
-      <h2>{running ? 'Working on it…' : 'Run to see results'}</h2>
-      <p>{running ? 'Your fleet is generating. Outputs land here the moment they finish.' : `Fill in the ${fieldCount ? 'fields' : 'graph'} and press Run. No credits, no cap — iterate freely.`}</p>
+      <h2>{running ? 'Workflow running' : 'Run to see results'}</h2>
+      <p>{running ? 'Results appear here when the selected executor returns outputs.' : <>To generate results, review the {fieldCount ? 'inputs' : 'workflow'} and select <strong>Run</strong>.</>}</p>
     </div></div>
   );
 }
@@ -525,8 +525,8 @@ function AppFieldControl(props: AppFieldControlProps) {
     const text = textValue(value);
     return (
       <div className="app-prompt">
-        <textarea rows={4} value={text} placeholder="Describe what you want…" onChange={(event) => onChange(event.target.value)} />
-        <small>{text.trim().length} chars</small>
+        <textarea rows={4} value={text} placeholder="Describe the output" onChange={(event) => onChange(event.target.value)} />
+        <small>{text.trim().length} characters</small>
       </div>
     );
   }

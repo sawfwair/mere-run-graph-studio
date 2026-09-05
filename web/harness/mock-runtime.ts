@@ -1,3 +1,4 @@
+import { nodeFixtureRun } from './node-fixture';
 import type { StudioRuntime } from '../src/runtime';
 import type { CatalogEntry, CommandDocument, ModelPull, StudioDocument } from '../src/types';
 
@@ -19,15 +20,15 @@ export const HARNESS_CATALOG: CatalogEntry[] = [
   { kind: 'dataset.prepare', title: 'Prepare dataset', category: 'dataset', inputs: [{ name: 'source', type: 'asset' }], outputs: [{ name: 'dataset', type: 'json' }] },
 ];
 
-export function createMockRuntime(): StudioRuntime {
+export function createMockRuntime(example = false): StudioRuntime {
   const mock: StudioRuntime = {
     executionScope: 'cloud' as const,
-    catalog: async () => ok({ nodes: HARNESS_CATALOG }),
+    catalog: async () => ok({ nodes: [...HARNESS_CATALOG, ...(example ? [{ kind: 'text.value', title: 'Text value', category: 'text', presentation: { style: 'material', primary_argument: 'value' }, inputs: [{ name: 'value', type: 'string', required: true, multiline: true }], outputs: [{ name: 'text', type: 'string' }] } satisfies CatalogEntry] : [])] }),
     executors: async () => ok({ executors: [{ kind: 'relay', name: 'fleet' }] }),
     templates: async () => ({ available: false, document: ok({ templates: [] }) }),
     projects: async () => ({ projects: [] }),
-    listRuns: async () => ({ runs: [] }),
-    inspectRun: async () => { throw new Error('harness: no runs'); },
+    listRuns: async () => ({ runs: example ? [await nodeFixtureRun()] : [] }),
+    inspectRun: async () => { if (example) return nodeFixtureRun(); throw new Error('harness: no runs'); },
     watchRun: async () => {},
     canInstallModels: () => true,
     modelPreflight: async () => ok({ status: 'ok', result: { models: [] } }),

@@ -96,7 +96,7 @@ export function CommandPalette({ open, placeholder, groups, onClose }: CommandPa
           <input
             ref={inputRef}
             value={query}
-            placeholder={placeholder}
+            placeholder={placeholder} aria-label="Search commands"
             onChange={(event) => setQuery(event.target.value)}
             spellCheck={false}
           />
@@ -128,7 +128,7 @@ export function CommandPalette({ open, placeholder, groups, onClose }: CommandPa
               })}
             </section>
           ))}
-          {!flat.length ? <div className="empty-state">Nothing matches “{query}”</div> : null}
+          {!flat.length ? <div className="empty-state">No results for "{query}". Try another search.</div> : null}
         </div>
       </div>
     </div>

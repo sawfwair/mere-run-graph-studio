@@ -53,7 +53,7 @@ function canonicalize(value: unknown): JsonValue {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   const record = recordValue(value, 'canonical JSON');
   return Object.fromEntries(
-    Object.keys(record).sort().map((key) => [key, canonicalize(record[key])]),
+    Object.keys(record).filter((key) => record[key] !== undefined).sort().map((key) => [key, canonicalize(record[key])]),
   );
 }
 

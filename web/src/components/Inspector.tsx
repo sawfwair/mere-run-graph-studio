@@ -448,8 +448,8 @@ function ArgumentField({
           {promotable ? (
             <button
               className="icon-button tiny"
-              title="Promote constant to a reusable material node"
-              aria-label={`Promote ${field.name}`}
+              title="Create a reusable value node"
+              aria-label={`Create a reusable value for ${field.name}`}
               onClick={() => onPromote?.(field.name)}
             ><Workflow size={12} /></button>
           ) : null}
@@ -517,11 +517,11 @@ function ReferenceArgumentEditor({ field, mode, value, options, onUpdate }: Omit
     return (
       <div className="linked-chip">
         <Link2 size={12} />
-        <span>Linked to <strong>{isGraphReference(value) ? describeReference(value.$ref) : ''}</strong></span>
+        <span>Connected to <strong>{isGraphReference(value) ? describeReference(value.$ref) : ''}</strong></span>
         <button
           className="icon-button small ghost"
-          title="Unlink and use a fixed value"
-          aria-label="Unlink"
+          title="Disconnect and use a fixed value"
+          aria-label="Disconnect input"
           onClick={() => onUpdate(field.name, defaultFieldValue({ ...field, secret: false }) ?? '')}
         ><Unlink size={12} /></button>
       </div>
@@ -545,7 +545,7 @@ function ArgumentValueEditor(props: ArgumentValueProps) {
         <input
           type="text"
           value={isSecretReference(value) ? value.$secret : ''}
-          placeholder="secret-name"
+          placeholder="Secret reference name" aria-label="Secret reference name"
           onChange={(event) => onUpdate(field.name, { $secret: event.target.value })}
         />
       </div>
@@ -597,8 +597,8 @@ function ArgumentList({ fields, entry, graph, catalog, node, mode, update, promo
   const onPromote = promoteHandler(entry, node.id, promote);
   return <>
     {fields.map((field) => <ArgumentField key={field.name} graph={graph} catalog={catalog} node={node} field={field} mode={mode} onUpdate={update} onPromote={onPromote} />)}
-    {!fields.length ? <div className="empty-state small">Nothing to configure. Connect the ports on the canvas.</div> : null}
-    {!entry ? <div className="empty-state small">Catalog entry unavailable</div> : null}
+    {entry && !fields.length ? <div className="empty-state small">This node has no settings. To connect nodes, drag between compatible ports.</div> : null}
+    {!entry ? <div className="empty-state small">Node definition unavailable</div> : null}
   </>;
 }
 
@@ -611,7 +611,7 @@ function AdvancedArguments({ fields, show, onShow, ...props }: {
   return <div className="advanced-block">
     <button className="advanced-toggle" onClick={onShow} aria-expanded={show}>
       <Settings2 size={13} />
-      <span>{show ? 'Hide advanced options' : `More options (${fields.length})`}</span>
+      <span>{show ? 'Hide advanced options' : `Advanced options (${fields.length})`}</span>
       {show ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
     </button>
     {show ? <ArgumentList fields={fields} {...props} /> : null}
@@ -627,10 +627,10 @@ function NodeExecution({ mode, node, onUpdate }: { mode: StudioMode; node: Workf
         const cache = event.target.value;
         if (cache === 'auto' || cache === 'never' || cache === 'refresh') onUpdate({ ...node, execution: { ...node.execution, cache } });
       }}
-    ><option>auto</option><option>never</option><option>refresh</option></select></label>
+    ><option value="auto">Automatic</option><option value="never">Never cache</option><option value="refresh">Refresh cache</option></select></label>
     <div className="field-grid">
       <label className="field"><span>Attempts</span><input type="number" min={1} max={10} value={node.execution?.max_attempts ?? 1} onChange={(event) => onUpdate({ ...node, execution: { ...node.execution, max_attempts: Number(event.target.value) } })} /></label>
-      <label className="field"><span>Timeout (s)</span><input type="number" min={1} value={node.execution?.timeout_seconds ?? ''} onChange={(event) => onUpdate({ ...node, execution: { ...node.execution, timeout_seconds: Number(event.target.value) || undefined } })} /></label>
+      <label className="field"><span>Timeout (seconds)</span><input type="number" min={1} value={node.execution?.timeout_seconds ?? ''} onChange={(event) => onUpdate({ ...node, execution: { ...node.execution, timeout_seconds: Number(event.target.value) || undefined } })} /></label>
     </div>
   </Section>;
 }
@@ -640,10 +640,10 @@ function MaterialSection({ graph, node, onInline }: { graph: WorkflowGraph; node
   const consumers = graph.nodes.filter((candidate) => candidate.id !== node.id && Object.values(candidate.arguments).some(
     (value) => referencesIn(value).some((reference) => reference.startsWith(`nodes.${node.id}.outputs.`)),
   ));
-  return <Section title="Material" count={consumers.length} defaultOpen>
-    {consumers.map((consumer) => <button className="command-button compact" key={consumer.id} onClick={() => onInline(node.id, consumer.id)}><Unlink size={13} /> Inline into {consumer.id}</button>)}
-    <button className="command-button compact" disabled={!consumers.length} onClick={() => onInline(node.id)}><Unlink size={13} /> Inline everywhere</button>
-    {!consumers.length ? <small className="field-description">This material has no node consumers.</small> : null}
+  return <Section title="Reusable value" count={consumers.length} defaultOpen>
+    {consumers.map((consumer) => <button className="command-button compact" key={consumer.id} onClick={() => onInline(node.id, consumer.id)}><Unlink size={13} /> Use value in {consumer.id}</button>)}
+    <button className="command-button compact" disabled={!consumers.length} onClick={() => onInline(node.id)}><Unlink size={13} /> Replace all connections with this value</button>
+    {!consumers.length ? <small className="field-description">No nodes use this value.</small> : null}
   </Section>;
 }
 
@@ -653,7 +653,7 @@ function NodeOutputs({ mode, entry, node, onAdd }: { mode: StudioMode; entry: Ca
   return <Section title="Outputs" count={outputs.length} defaultOpen={false}>
     {outputs.map((output) => <div className="output-row" key={output.name}>
       <span><strong>{output.name}</strong><small>{output.type}</small></span>
-      <button className="icon-button small" title="Expose as graph output" aria-label={`Expose ${output.name} as graph output`} onClick={() => onAdd(node.id, output.name)}><Plus size={14} /></button>
+      <button className="icon-button small" title="Add as a workflow output" aria-label={`Add ${output.name} as a workflow output`} onClick={() => onAdd(node.id, output.name)}><Plus size={14} /></button>
     </div>)}
   </Section>;
 }
@@ -688,7 +688,7 @@ function NodeInspector({ graph, catalog, node, mode, onUpdateNode, onPromoteArgu
     <NodeExecution mode={mode} node={node} onUpdate={onUpdateNode} />
     <MaterialSection graph={graph} node={node} onInline={onInlineMaterial} />
     <NodeOutputs mode={mode} entry={entry} node={node} onAdd={onAddOutput} />
-    <div className="inspector-footer"><button className="command-button danger" onClick={() => onDeleteNode(node.id)}><Trash2 size={14} /> {mode === 'easy' ? 'Remove step' : 'Delete node'}</button></div>
+    <div className="inspector-footer"><button className="command-button danger" onClick={() => onDeleteNode(node.id)}><Trash2 size={14} /> Delete node</button></div>
   </>;
 }
 
@@ -886,12 +886,13 @@ function MultiSelectionInspector({ selectedNodeIds }: Pick<InspectorProps, 'sele
 
 function GraphInspector({
   graph,
+  catalog,
   sidecar,
   mode,
   onGraphChange,
   onSidecarChange,
   onSelectNodes,
-}: Pick<InspectorProps, 'graph' | 'sidecar' | 'mode' | 'onGraphChange' | 'onSidecarChange' | 'onSelectNodes'>) {
+}: Pick<InspectorProps, 'graph' | 'catalog' | 'sidecar' | 'mode' | 'onGraphChange' | 'onSidecarChange' | 'onSelectNodes'>) {
   const edgeCount = useMemo(
     () => graph.nodes.reduce(
       (count, node) => count + Object.values(node.arguments).filter(
@@ -915,24 +916,26 @@ function GraphInspector({
           /></label>
         ) : null}
         <div className="stat-strip" role="group" aria-label="Workflow summary">
-          <span><strong>{graph.nodes.length}</strong> {graph.nodes.length === 1 ? 'step' : 'steps'}</span>
-          <span><strong>{edgeCount}</strong> {edgeCount === 1 ? 'link' : 'links'}</span>
-          <span><strong>{Object.keys(graph.inputs).length}</strong> in</span>
-          <span><strong>{Object.keys(graph.outputs).length}</strong> out</span>
+          <span><strong>{graph.nodes.length}</strong> {graph.nodes.length === 1 ? 'node' : 'nodes'}</span>
+          <span><strong>{edgeCount}</strong> {edgeCount === 1 ? 'connection' : 'connections'}</span>
+          <span><strong>{Object.keys(graph.inputs).length}</strong> inputs</span>
+          <span><strong>{Object.keys(graph.outputs).length}</strong> outputs</span>
+        </div>
+      </Section>
+      <Section title="Workflow outline" count={graph.nodes.length}>
+        <div className="workflow-outline">
+          {graph.nodes.map((node, index) => (
+            <button className="outline-step" key={node.id} onClick={() => onSelectNodes([node.id])}>
+              <span className="outline-number">{String(index + 1).padStart(2, '0')}</span>
+              <span><strong>{catalogEntryFor(node, catalog)?.title ?? node.kind}</strong><small>{node.id}</small></span>
+              <ChevronRight size={14} />
+            </button>
+          ))}
+          {!graph.nodes.length ? <p className="outline-empty">To start the workflow outline, add a node.</p> : null}
         </div>
       </Section>
       {mode === 'pro' ? (
         <>
-          <Section title="Nodes" count={graph.nodes.length}>
-            {graph.nodes.map((node) => (
-              <div className="output-row" key={node.id}>
-                <button className="text-command" onClick={() => onSelectNodes([node.id])}>
-                  <strong>{node.id}</strong><small>{node.kind}</small>
-                </button>
-              </div>
-            ))}
-            {!graph.nodes.length ? <div className="empty-state small">No nodes</div> : null}
-          </Section>
           <Section title="Graph outputs" count={Object.keys(graph.outputs).length}>
             {Object.entries(graph.outputs).map(([name, reference]) => (
               <div className="output-row" key={name}>
@@ -968,7 +971,7 @@ function GraphInspector({
           </Section>
         </>
       ) : (
-        <div className="inspector-tip"><Sparkles size={13} /><span>Select a step to tune it, or choose a template from the library.</span></div>
+        <div className="inspector-tip"><Sparkles size={13} /><span>To edit a node, select it on the canvas or in the workflow outline.</span></div>
       )}
     </>
   );
@@ -1036,6 +1039,7 @@ export function Inspector(props: InspectorProps): ReactElement {
         </button>
       </div>
       <div className="inspector-body">
+        {node ? <button className="inspector-back" onClick={() => props.onSelectNodes([])}><Workflow size={13} /> Back to workflow</button> : null}
         <InspectorContent props={props} node={node} />
       </div>
     </aside>

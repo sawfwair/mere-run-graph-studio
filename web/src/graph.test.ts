@@ -61,7 +61,7 @@ describe('graph editing', () => {
     expect(first.nodeId).toBe('generate');
     expect(second.nodeId).toBe('generate-2');
     expect(second.graph.nodes[0].arguments.prompt).toBe('');
-    expect(second.sidecar.nodes['generate-2']).toEqual({ x: 400, y: 80 });
+    expect(second.sidecar.nodes['generate-2']).toEqual({ x: 500, y: 80 });
     expect(JSON.stringify(second.graph)).not.toContain('"x"');
   });
 

@@ -20,17 +20,25 @@ const outDir = process.env.HARNESS_OUT ?? resolve(here, 'shots');
 mkdirSync(outDir, { recursive: true });
 
 const DEFAULT_SHOTS = [
+  { name: 'node-examples', query: 'example=1&left=1&right=1', viewport: { width: 1600, height: 1000 } },
+  { name: 'node-examples-mobile', query: 'example=1', viewport: { width: 390, height: 844 } },
   { name: 'shell-default', query: '', viewport: { width: 1600, height: 1000 } },
   { name: 'shell-left-collapsed', query: 'left=1', viewport: { width: 1600, height: 1000 } },
   { name: 'shell-both-collapsed', query: 'left=1&right=1', viewport: { width: 1600, height: 1000 } },
   { name: 'shell-pro', query: 'mode=pro', viewport: { width: 1600, height: 1000 } },
   { name: 'shell-mobile', query: '', viewport: { width: 390, height: 844 } },
   { name: 'shell-mobile-pro', query: 'mode=pro', viewport: { width: 390, height: 844 } },
+  { name: 'shell-empty', query: 'empty=1', viewport: { width: 1600, height: 1000 } },
+  { name: 'shell-mobile-empty', query: 'empty=1', viewport: { width: 390, height: 844 } },
+  { name: 'shell-tablet-pro', query: 'mode=pro', viewport: { width: 768, height: 900 } },
+  { name: 'shell-app', query: '', view: 'App', viewport: { width: 1600, height: 1000 } },
+  { name: 'shell-mobile-app', query: '', view: 'App', viewport: { width: 390, height: 844 } },
+  { name: 'shell-mobile-json', query: 'mode=pro', view: 'JSON', viewport: { width: 390, height: 844 } },
 ];
 const shots = process.argv.slice(2).length
   ? process.argv.slice(2).map((arg) => {
     const i = arg.indexOf('=');
-    return { name: arg.slice(0, i), query: arg.slice(i + 1), viewport: { width: 1600, height: 1000 } };
+    return { name: arg.slice(0, i), query: arg.slice(i + 1), view: undefined, viewport: { width: 1600, height: 1000 } };
   })
   : DEFAULT_SHOTS;
 
@@ -104,26 +112,110 @@ async function verifyInspectorCanvasInteraction() {
   console.log('✓ canvas selection and inspector edit/collapse interaction');
 }
 
-await verifyInspectorCanvasInteraction();
+async function verifyLibraryAndOutline() {
+  await page.goto(base, { waitUntil: 'networkidle' });
+  await page.locator('.outline-step').first().click();
+  await page.locator('.inspector-heading').filter({ hasText: 'Generate image' }).waitFor();
+  await page.getByRole('button', { name: 'Back to workflow' }).click();
+  await page.locator('.workflow-outline').waitFor();
+  await page.locator('.category-filters').getByRole('button', { name: 'Image', exact: true }).click();
+  if (await page.locator('.catalog-item').count() !== 2) throw new Error('Image category should show two nodes');
+  await page.getByRole('textbox', { name: 'Search nodes' }).fill('no-such-node');
+  await page.getByText('No matching nodes. Try another search or category.').waitFor();
+  await page.getByRole('textbox', { name: 'Search nodes' }).fill('');
+  const before = await page.locator('.react-flow__node-workflow').count();
+  await page.locator('.catalog-item').filter({ hasText: 'Upscale image' }).click();
+  await page.waitForFunction((count) => document.querySelectorAll('.react-flow__node-workflow').length === count + 1, before);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await page.waitForFunction((count) => document.querySelectorAll('.react-flow__node-workflow').length === count, before);
+  console.log('✓ outline navigation, category/search filtering, add node and undo');
+}
 
-for (const { name, query, viewport } of shots) {
+async function verifyMobileGraphFraming() {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(base, { waitUntil: 'networkidle' });
+  await page.locator('.react-flow__node-workflow').first().waitFor();
+  const canvas = await page.locator('.graph-canvas-shell').boundingBox();
+  const nodeBoxes = await page.locator('.react-flow__node-workflow').evaluateAll((elements) => elements.map((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  }));
+  if (!canvas || nodeBoxes.some((node) => node.x < canvas.x || node.x + node.width > canvas.x + canvas.width || node.y < canvas.y || node.y + node.height > canvas.y + canvas.height)) {
+    throw new Error('Mobile opening must frame every workflow node');
+  }
+  await page.getByRole('tab', { name: 'Library', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Search nodes' }).fill('upscale');
+  await page.locator('.mobile-library-view .catalog-item').filter({ hasText: 'Upscale image' }).waitFor();
+  await page.getByRole('tab', { name: 'Inspect', exact: true }).click();
+  await page.locator('.mobile-inspector-view .outline-step').first().click();
+  await page.locator('.mobile-inspector-view .inspector-heading').filter({ hasText: 'Generate image' }).waitFor();
+  console.log('✓ mobile graph framing, library search and inspector navigation');
+}
+
+async function verifyNodePromptEditing() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(base, { waitUntil: 'networkidle' });
+  const prompt = page.getByRole('textbox', { name: 'Prompt for render', exact: true });
+  await prompt.fill('An observatory at sunrise');
+  await prompt.press('Backspace');
+  if (await page.locator('.react-flow__node-workflow').count() !== 2) throw new Error('Editing a prompt must not delete a node');
+  await page.locator('.react-flow__node-workflow').first().locator('.workflow-node-header').click();
+  const inspectorPrompt = page.locator('.inspector-body .field').filter({ hasText: 'Prompt' }).locator('input, textarea').first();
+  if (await inspectorPrompt.inputValue() !== await prompt.inputValue()) throw new Error('Inline prompt edit must update the inspector');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  if (await prompt.inputValue() !== 'An observatory at sunrise') throw new Error('Undo must restore the deleted character');
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  if (await prompt.inputValue() !== 'a red sports car') throw new Error('Undo must restore the original prompt');
+  await page.goto(`${base}/?example=1`, { waitUntil: 'networkidle' });
+  await page.locator('.canvas-run-preview').waitFor();
+  if (await page.getByRole('textbox', { name: 'Prompt for render', exact: true }).count()) throw new Error('Connected prompts must not expose a literal editor');
+  await page.getByRole('textbox', { name: 'Value for description', exact: true }).fill('Updated description');
+  await page.locator('.canvas-run-preview').waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 4);
+  console.log('✓ inline prompt editing, undo, connected values, and preview invalidation');
+}
+
+await verifyNodePromptEditing();
+await verifyInspectorCanvasInteraction();
+await verifyLibraryAndOutline();
+await verifyMobileGraphFraming();
+
+for (const { name, query, viewport, view } of shots) {
   await page.setViewportSize(viewport);
   await page.goto(`${base}/${query ? `?${query}` : ''}`, { waitUntil: 'networkidle' });
   await page.waitForSelector('.app-shell', { timeout: 15000 });
+  if (view) await page.getByRole('tab', { name: view, exact: true }).click();
   await page.waitForTimeout(700); // let entrance motion settle
-  const layout = await page.evaluate(() => ({
-    viewportWidth: window.innerWidth,
-    documentWidth: document.documentElement.scrollWidth,
-  }));
+  const layout = await page.evaluate(() => {
+    const workspace = document.querySelector('.workspace');
+    if (!workspace) throw new Error('Workspace is missing');
+    return {
+      viewportWidth: window.innerWidth,
+      documentWidth: document.documentElement.scrollWidth,
+      workspaceOverflow: workspace.scrollWidth > workspace.clientWidth + 1,
+    };
+  });
   if (layout.documentWidth > layout.viewportWidth + 1) {
     throw new Error(`${name} overflows horizontally: ${layout.documentWidth}px document in ${layout.viewportWidth}px viewport`);
   }
+  if (layout.workspaceOverflow) throw new Error(`${name} workspace content overflows horizontally`);
   await page.screenshot({ path: resolve(outDir, `${name}.png`) });
   console.log(`✓ ${name}.png`);
+}
+
+for (const width of [1600, 390]) {
+  await page.setViewportSize({ width, height: 1000 });
+  await page.goto(`${base}/?landing=1`, { waitUntil: 'networkidle' });
+  await page.locator('.cloud-site').waitFor();
+  await page.waitForTimeout(700);
+  const overflow = await page.locator('.cloud-site').evaluate((site) => site.scrollWidth > site.clientWidth + 1);
+  if (overflow) throw new Error(`Landing page overflows at ${width}px`);
+  await page.screenshot({ path: resolve(outDir, `landing-${width}.png`), fullPage: true });
+  console.log(`✓ landing-${width}.png`);
 }
 
 if (browserErrors.length) throw new Error(`Browser errors:\n${browserErrors.join('\n')}`);
 
 await browser.close();
 await server.close();
-console.log(`\nWrote ${shots.length} shot(s) to ${outDir}`);
+console.log(`\nWrote ${shots.length + 2} shot(s) to ${outDir}`);

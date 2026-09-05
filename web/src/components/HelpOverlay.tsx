@@ -10,7 +10,7 @@ interface ShortcutRow {
 }
 
 const KEYBOARD_SHORTCUTS: ShortcutRow[] = [
-  { keys: ['⌘', 'K'], label: 'Command palette — search actions, nodes, and templates' },
+  { keys: ['⌘', 'K'], label: 'Search actions, nodes, and templates' },
   { keys: ['⌘', 'S'], label: 'Save workflow' },
   { keys: ['⌘', 'Z'], label: 'Undo' },
   { keys: ['⇧', '⌘', 'Z'], label: 'Redo' },
@@ -21,15 +21,15 @@ const KEYBOARD_SHORTCUTS: ShortcutRow[] = [
   { keys: ['4'], label: 'Prepare view', proOnly: true },
   { keys: ['5'], label: 'Runs view' },
   { keys: ['⌫'], label: 'Delete selected canvas items' },
-  { keys: ['?'], label: 'Show this overlay' },
+  { keys: ['?'], label: 'Open shortcuts and tips' },
 ];
 
 const POINTER_TIPS: ShortcutRow[] = [
-  { keys: [], label: 'Drag a node from the library and drop it anywhere on the canvas' },
-  { keys: [], label: 'Desktop: drop files to create visual, wireable graph inputs' },
-  { keys: [], label: 'Double-click empty canvas to add a node right there' },
-  { keys: [], label: 'Drag from an output port to a compatible input port to connect steps' },
-  { keys: [], label: 'Scroll to zoom, drag empty space to pan' },
+  { keys: [], label: 'To add a node, drag it from the library onto the canvas.' },
+  { keys: [], label: 'In the desktop app, drop files onto the canvas to create workflow inputs.' },
+  { keys: [], label: 'To add a node at a specific position, double-click an empty area of the canvas.' },
+  { keys: [], label: 'To connect nodes, drag from an output port to a compatible input port.' },
+  { keys: [], label: 'To zoom, scroll or use the zoom controls. To pan, drag an empty area of the canvas.' },
 ];
 
 export function HelpOverlay({ open, mode, onClose }: { open: boolean; mode: StudioMode; onClose: () => void }): ReactElement | null {
@@ -39,7 +39,7 @@ export function HelpOverlay({ open, mode, onClose }: { open: boolean; mode: Stud
     <div className="overlay-scrim" onMouseDown={onClose} role="presentation">
       <section className="help-overlay" role="dialog" aria-label="Keyboard shortcuts" onMouseDown={(event) => event.stopPropagation()}>
         <header className="help-heading">
-          <strong>Shortcuts &amp; tips</strong>
+          <strong>Shortcuts and tips</strong>
           <button className="icon-button small ghost" onClick={onClose} aria-label="Close help">
             <X size={15} />
           </button>
@@ -65,8 +65,8 @@ export function HelpOverlay({ open, mode, onClose }: { open: boolean; mode: Stud
             ))}
             <p className="help-note">
               {mode === 'easy'
-                ? 'Easy mode keeps templates and essential settings in reach while the selected execution target stays visible.'
-                : 'Pro mode adds Program, Prepare, JSON, layout tools, cache control, references, and secrets.'}
+                ? 'Easy mode shows templates and essential settings. The execution target stays visible in the toolbar.'
+                : 'Pro mode adds Program, Prepare, and JSON views, layout tools, cache settings, references, and secret references.'}
             </p>
           </div>
         </div>

@@ -118,7 +118,7 @@ function RunDetailHeader({ run, artifactNames, onCancel, onFetch, onRetry, onRes
     {!terminal ? <button className="command-button danger" onClick={() => onCancel(run.id)}><Ban size={14} /> Cancel</button> : null}
     {run.remote_reference && terminal ? <button className="command-button" onClick={() => onRetry(run.id)}><RotateCcw size={14} /> Retry</button> : null}
     {canResume ? <button className="command-button" onClick={() => onResume(run.id)}><Play size={14} /> Resume</button> : null}
-    {run.remote_reference ? <button className="command-button" onClick={() => onFetch(run.id, false, artifactNames)}><Download size={14} /> {artifactNames.length ? `Fetch ${artifactNames.length}` : 'Fetch outputs'}</button> : null}
+    {run.remote_reference ? <button className="command-button" onClick={() => onFetch(run.id, false, artifactNames)}><Download size={14} /> {artifactNames.length ? `Download ${artifactNames.length}` : 'Download outputs'}</button> : null}
   </header>;
 }
 
@@ -147,7 +147,7 @@ function ExecutionSection({ nodes, node, run, onSelectNode }: {
         <span>Attempt {textValue(node.attempt, '0')}</span>
         {fingerprint ? <code title={fingerprint}>{fingerprint.slice(0, 12)}</code> : null}
       </div>
-      {detail?.stdout || detail?.stderr ? <pre>{[detail.stdout, detail.stderr].filter(Boolean).join('\n')}</pre> : <div className="empty-state">No node log output</div>}
+      {detail?.stdout || detail?.stderr ? <pre>{[detail.stdout, detail.stderr].filter(Boolean).join('\n')}</pre> : <div className="empty-state">No log output for this node.</div>}
     </div> : null}
   </section>;
 }
@@ -165,7 +165,7 @@ function ArtifactsSection({ run, selectedNames, preview, onToggle, onPreview, on
   return <section className="run-section">
     <div className="section-heading">
       <h3>Artifacts</h3>
-      {run.remote_reference ? <button className="text-button" onClick={() => onFetch(run.id, true, [])}>Fetch all artifacts</button> : null}
+      {run.remote_reference ? <button className="text-button" onClick={() => onFetch(run.id, true, [])}>Download all artifacts</button> : null}
     </div>
     <div className="artifact-workspace">
       <div className="artifact-list">
@@ -178,7 +178,7 @@ function ArtifactsSection({ run, selectedNames, preview, onToggle, onPreview, on
             <code title={artifact.sha256}>{artifact.sha256?.slice(0, 10) ?? 'no hash'}</code>
           </div>
         ))}
-        {!artifacts.length ? <div className="empty-state">No declared artifacts</div> : null}
+        {!artifacts.length ? <div className="empty-state">This run has no recorded artifacts.</div> : null}
       </div>
       <div className="artifact-preview">
         {preview ? <ArtifactPreview run={run} artifact={preview} load={artifactBlob} /> : <div className="artifact-preview-empty"><Image size={18} /> Select an artifact</div>}
@@ -250,7 +250,7 @@ export function RunsView({ runs, selected, onSelect, onRefresh, ...detailProps }
     <div className="runs-view">
       <RunList runs={runs} selected={selected} onSelect={onSelect} onRefresh={onRefresh} />
       <div className="run-detail">
-        {selected ? <RunDetail key={selected.id} run={selected} {...detailProps} /> : <div className="empty-state">No run selected</div>}
+        {selected ? <RunDetail key={selected.id} run={selected} {...detailProps} /> : <div className="empty-state">To view results, select a run. To create a run, use Run in the toolbar.</div>}
       </div>
     </div>
   );

@@ -12,7 +12,7 @@ import {
 } from '../graph';
 import { parseJsonValue } from '../decode';
 import { candidateModels, modelFieldFor } from '../models';
-import { argumentSummaries, categoryKey, friendlyType, portTypeKey, splitFieldsForMode, textValue, type StudioMode } from '../ui';
+import { argumentSummaries, categoryKey, categoryTitle, friendlyLabel, friendlyType, portTypeKey, splitFieldsForMode, textValue, type StudioMode } from '../ui';
 import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type {
   CatalogEntry,
@@ -107,7 +107,7 @@ function ChoiceMaterialEditor({ field, value, current, onArgumentChange }: Mater
     ? value.arguments.options.filter((item): item is string => typeof item === 'string')
     : [];
   return (
-    <select className={materialInputClass} value={textValue(current)} onChange={(event) => onArgumentChange(field.name, event.target.value)}>
+    <select className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`} value={textValue(current)} onChange={(event) => onArgumentChange(field.name, event.target.value)}>
       {options.map((option) => <option key={option}>{option}</option>)}
     </select>
   );
@@ -117,7 +117,7 @@ function ScalarMaterialEditor({ field, value, current, onArgumentChange }: Mater
   if (field.type === 'boolean') {
     return (
       <label className="material-switch nodrag">
-        <input type="checkbox" checked={Boolean(current)} onChange={(event) => onArgumentChange(field.name, event.target.checked)} />
+        <input type="checkbox" aria-label={`${friendlyLabel(field.name)} for ${value.id}`} checked={Boolean(current)} onChange={(event) => onArgumentChange(field.name, event.target.checked)} />
         <span>{current ? 'On' : 'Off'}</span>
       </label>
     );
@@ -125,7 +125,7 @@ function ScalarMaterialEditor({ field, value, current, onArgumentChange }: Mater
   if (field.type === 'integer' || field.type === 'number') {
     return (
       <input
-        className={materialInputClass}
+        className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`}
         type="number"
         value={typeof current === 'number' ? current : ''}
         onChange={(event) => {
@@ -143,14 +143,14 @@ function ScalarMaterialEditor({ field, value, current, onArgumentChange }: Mater
   if (field.multiline || value.kind === 'text.template') {
     return (
       <textarea
-        className={materialInputClass}
+        className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`}
         rows={3}
         value={typeof current === 'string' ? current : ''}
         onChange={(event) => onArgumentChange(field.name, event.target.value)}
       />
     );
   }
-  return <input className={materialInputClass} value={typeof current === 'string' ? current : ''} onChange={(event) => onArgumentChange(field.name, event.target.value)} />;
+  return <input className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`} value={typeof current === 'string' ? current : ''} onChange={(event) => onArgumentChange(field.name, event.target.value)} />;
 }
 
 function StructuredMaterialEditor({ field, value, current, onArgumentChange }: MaterialEditorContentProps) {
@@ -158,7 +158,7 @@ function StructuredMaterialEditor({ field, value, current, onArgumentChange }: M
     const connected = isGraphReference(current);
     return (
       <input
-        className={materialInputClass}
+        className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`}
         value={connected ? 'Connected media' : typeof current === 'string' ? current : ''}
         disabled={connected}
         placeholder="Choose or connect media"
@@ -171,7 +171,7 @@ function StructuredMaterialEditor({ field, value, current, onArgumentChange }: M
       <div className="material-list">
         {current.map((item, index) => (
           <input
-            className={materialInputClass}
+            className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`}
             key={index}
             value={typeof item === 'string' ? item : isGraphReference(item) ? 'Connected value' : ''}
             disabled={isGraphReference(item)}
@@ -187,7 +187,7 @@ function StructuredMaterialEditor({ field, value, current, onArgumentChange }: M
   }
   return (
     <textarea
-      className={materialInputClass}
+      className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`}
       rows={3}
       defaultValue={JSON.stringify(current ?? {}, null, 2)}
       onBlur={(event) => {
@@ -283,7 +283,7 @@ function CanvasRunPreview({
 
   return (
     <>
-      <div className={`canvas-run-preview ${item.value !== undefined ? 'scalar' : 'artifact'}`} title={`Matching run ${preview.runId}`}>
+      <div className={`canvas-run-preview ${item.value !== undefined ? 'scalar' : 'artifact'}`} title={`Preview from run ${preview.runId}`}>
         {media(item, url)}
         <div className="canvas-preview-bar">
           <small>{item.outputName ?? artifact?.name ?? 'output'}</small>
@@ -305,7 +305,7 @@ function CanvasRunPreview({
             {media(item, url, true)}
             <footer>
               <strong>{item.outputName ?? artifact?.name ?? 'output'}</strong>
-              <span>Generation {index + 1} of {preview.items.length} · run {preview.runId}</span>
+              <span>Output {index + 1} of {preview.items.length} · run {preview.runId}</span>
             </footer>
           </div>
           {preview.items.length > 1 ? <button className="lightbox-nav next" onMouseDown={(event) => event.stopPropagation()} onClick={next} aria-label="Next output"><ChevronRight size={24} /></button> : null}
@@ -350,8 +350,8 @@ function RaceModelsButton({ data, nodeId, models }: { data: WorkflowNodeData; no
   return <button
     type="button"
     className="node-model-race nodrag"
-    title={`Race the first ${raceModels.length} models on your fleet`}
-    aria-label="Race models"
+    title={`Compare the first ${raceModels.length} models on the selected executor`}
+    aria-label="Compare models"
     onClick={() => data.onRaceModels?.(nodeId, raceModels)}
   ><Layers size={11} /></button>;
 }
@@ -368,7 +368,7 @@ function NodeModelSelector({ data, entry, value }: {
   const available = data.availableModels ?? [];
   const missing = typeof currentModel === 'string' && available.length > 0 && !available.includes(currentModel);
   return <div className={`node-model nodrag ${missing ? 'missing' : ''}`}>
-    <span className="node-model-icon" title={missing ? `${String(currentModel)} is not installed on your fleet` : undefined}>
+    <span className="node-model-icon" title={missing ? `${String(currentModel)} is not installed on the selected executor` : undefined}>
       {missing ? <AlertTriangle size={11} /> : <Cpu size={11} />}
     </span>
     <select
@@ -378,7 +378,7 @@ function NodeModelSelector({ data, entry, value }: {
       aria-label="Model"
       title={`Model: ${typeof currentModel === 'string' ? currentModel : 'default'}`}
     >
-      {typeof currentModel !== 'string' ? <option value="">default model</option> : null}
+      {typeof currentModel !== 'string' ? <option value="">Default model</option> : null}
       {models.map((model) => <option key={model} value={model}>{model}</option>)}
     </select>
     <InstallModelButton data={data} currentModel={currentModel} missing={missing} />
@@ -386,15 +386,48 @@ function NodeModelSelector({ data, entry, value }: {
   </div>;
 }
 
+function inlinePromptField(entry: CatalogEntry | undefined, value: WorkflowNodeValue): CatalogField | undefined {
+  if (entry?.presentation?.style === 'material') return undefined;
+  const field = entry?.inputs.find((candidate) => candidate.name === 'prompt' && candidate.type === 'string' && !candidate.secret);
+  if (!field || (value.arguments[field.name] !== undefined && typeof value.arguments[field.name] !== 'string')) return undefined;
+  return field;
+}
+
+function NodePrompt({ data }: { data: WorkflowNodeData }) {
+  const field = inlinePromptField(data.entry, data.value);
+  if (!field) return null;
+  return <label className="node-prompt nodrag nopan">
+    <span><Type size={11} /> Prompt</span>
+    <textarea
+      className="nodrag nopan nowheel"
+      aria-label={`Prompt for ${data.value.id}`}
+      value={textValue(data.value.arguments[field.name])}
+      placeholder="Describe the output"
+      rows={3}
+      readOnly={!data.onArgumentChange}
+      onChange={(event) => data.onArgumentChange?.(field.name, event.target.value)}
+    />
+  </label>;
+}
+
+function inputRequired(field: CatalogField, value: WorkflowNodeValue, wired: boolean): boolean {
+  return Boolean(field.required && !wired && field.default === undefined && value.arguments[field.name] === undefined);
+}
+
+function hiddenInputsLabel(count: number): string {
+  return `${count} more ${count === 1 ? 'input' : 'inputs'} in the inspector`;
+}
+
 function InputPort({ field, value, mode }: { field: CatalogField; value: WorkflowNodeValue; mode: StudioMode }) {
   const nested = nestedPorts(field, value.arguments[field.name]);
   const wired = isGraphReference(value.arguments[field.name]) || nested.some((port) => isGraphReference(port.value));
-  const required = field.required && !wired && value.arguments[field.name] === undefined;
+  const required = inputRequired(field, value, wired);
   return <div className="port-stack">
     <div className={`port-row ${wired ? 'wired' : ''}`} title={mode === 'pro' ? `${field.name}: ${field.type}` : `${field.name} · ${friendlyType(field.type)}`}>
       <Handle type="target" position={Position.Left} id={field.name} className={`port-handle t-${portTypeKey(field.type)} ${isGraphReference(value.arguments[field.name]) ? 'wired' : ''}`} />
-      <span className="port-name">{field.name}</span>
-      {required ? <b className="port-required" aria-label="required">●</b> : null}
+      <span className="port-name">{mode === 'easy' ? friendlyLabel(field.name) : field.name}</span>
+      {wired ? <Link2 size={10} className="port-connected" aria-label="Connected input" /> : null}
+      {required ? <b className="port-required">Required</b> : null}
     </div>
     {nested.map((port) => (
       <div className={`port-row nested ${isGraphReference(port.value) ? 'wired' : ''}`} key={argumentPathHandle(port.path)}>
@@ -413,12 +446,15 @@ function NodePorts({ inputs, outputs, value, mode }: {
 }) {
   return <div className="workflow-node-ports">
     <div className="port-column inputs">
+      <div className="port-column-heading">Inputs <span>{inputs.length}</span></div>
       {inputs.map((field) => <InputPort field={field} value={value} mode={mode} key={field.name} />)}
     </div>
     <div className="port-column outputs">
+      <div className="port-column-heading">Outputs <span>{outputs.length}</span></div>
       {outputs.map((field) => (
         <div className="port-row" key={field.name} title={mode === 'pro' ? `${field.name}: ${field.type}` : `${field.name} · ${friendlyType(field.type)}`}>
-          <span className="port-name">{field.name}</span>
+          <span className="port-name">{mode === 'easy' ? friendlyLabel(field.name) : field.name}</span>
+          <small className="port-type">{friendlyType(field.type)}</small>
           <Handle type="source" position={Position.Right} id={field.name} className={`port-handle t-${portTypeKey(field.type)}`} />
         </div>
       ))}
@@ -428,7 +464,8 @@ function NodePorts({ inputs, outputs, value, mode }: {
 }
 
 function NodeSummaries({ value, entry, mode }: { value: WorkflowNodeValue; entry: CatalogEntry | undefined; mode: StudioMode }) {
-  const summaries = argumentSummaries(value, entry, mode === 'easy' ? 3 : 2);
+  const primary = entry?.presentation?.style === 'material' ? entry.presentation.primary_argument : undefined;
+  const summaries = argumentSummaries(value, entry, mode === 'easy' ? 3 : 2).filter((summary) => summary.name !== inlinePromptField(entry, value)?.name && summary.name !== primary);
   if (!summaries.length) return null;
   return <div className="node-params">
     {summaries.map((summary) => (
@@ -441,10 +478,10 @@ function NodeSummaries({ value, entry, mode }: { value: WorkflowNodeValue; entry
 }
 
 function NodeFooter({ entry, value, mode }: { entry: CatalogEntry | undefined; value: WorkflowNodeValue; mode: StudioMode }) {
-  if (mode !== 'pro') return null;
   return <footer className="workflow-node-footer">
-    <span>{entry?.provider?.id ?? value.provider ?? 'mere.run'}</span>
-    {value.execution?.cache === 'never' ? <span className="footer-flag"><Zap size={9} /> uncached</span> : null}
+    <span className="node-provider"><Cpu size={11} /> {entry?.provider?.id ?? value.provider ?? 'mere.run'}</span>
+    {mode === 'pro' ? <span className="node-kind-label" title={value.kind}>{value.kind}</span> : null}
+    {value.execution?.cache === 'never' ? <span className="footer-flag"><Zap size={9} /> Cache off</span> : null}
   </footer>;
 }
 
@@ -468,13 +505,15 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
         title="Ordering dependency"
       />
       <header className="workflow-node-header">
-        <span className="node-kind-icon"><Icon size={15} strokeWidth={1.9} /></span>
+        <span className="node-kind-icon"><Icon size={20} strokeWidth={1.7} /></span>
         <span className="node-heading">
+          <small className="node-category">{categoryTitle(category)}</small>
           <strong>{entry?.title ?? value.kind}</strong>
-          <small>{value.id}</small>
+          <small className="node-id">{value.id}</small>
         </span>
-        <span className="node-ordinal">{String(ordinal).padStart(2, '0')}</span>
+        <span className="node-ordinal" title={`Node ${ordinal}`}><span>Node</span>{String(ordinal).padStart(2, '0')}</span>
       </header>
+      <NodePrompt data={data} />
       <NodeModelSelector data={data} entry={entry} value={value} />
       {entry?.presentation?.style === 'material' ? (
         <div className="material-editor">
@@ -483,7 +522,7 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
       ) : null}
       {preview ? <CanvasRunPreview preview={preview} artifactBlob={artifactBlob} /> : null}
       <NodePorts inputs={inputs} outputs={outputs} value={value} mode={mode} />
-      {hiddenInputCount ? <div className="node-hidden-inputs">+ {hiddenInputCount} inputs in inspector</div> : null}
+      {hiddenInputCount ? <div className="node-hidden-inputs">{hiddenInputsLabel(hiddenInputCount)}</div> : null}
       <NodeSummaries value={value} entry={entry} mode={mode} />
       <NodeFooter entry={entry} value={value} mode={mode} />
       <Handle

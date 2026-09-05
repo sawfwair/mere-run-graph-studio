@@ -51,7 +51,7 @@ const TYPE_LABELS: Record<FieldType, string> = {
   string: 'text',
   integer: 'whole number',
   number: 'number',
-  boolean: 'on / off',
+  boolean: 'on or off',
   enum: 'choice',
   json: 'structured data',
   asset: 'media file',
