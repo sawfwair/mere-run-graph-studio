@@ -24,6 +24,8 @@ State is driven by URL query params:
 | `?mode=pro`| start in Pro mode (default: Easy)             |
 | `?empty=1` | start with an empty graph (default: 2-node)   |
 | `?example=1` | show reusable values, workflow inputs and outputs, and a recorded result |
+| `?live=1` | run a simulated timeline with progress and image outputs |
+| `?live=failed` | run a simulated timeline where the video node fails |
 | `?landing=1` | show the hosted landing page |
 
 ## Capture screenshots
@@ -35,7 +37,8 @@ pnpm harness:shoot hero=mode=pro  # custom "name=query" shots
 
 - Output goes to `web/harness/shots/` (gitignored). Override with `HARNESS_OUT`.
 - The command checks inline prompt editing, undo, reference preservation,
-  preview invalidation, and library navigation. It also checks desktop, tablet,
+  previous-run labeling, and library navigation. Live-run checks cover reported
+  progress, early outputs, failure retention, pinning, comparison, and cancellation. It also checks desktop, tablet,
   and mobile layouts. Browser errors and horizontal overflow fail the check.
 - Uses installed Google Chrome on macOS when available, otherwise Playwright's
   managed Chromium. Override with `HARNESS_BROWSER=/path/to/chrome`.
@@ -46,3 +49,6 @@ pnpm harness:shoot hero=mode=pro  # custom "name=query" shots
   To review another runtime state, add a sample response to that file.
 - The `node-fixture.ts` file provides connected nodes and a recorded output
   for the node design examples.
+
+The `live-runtime.ts` fixture emits simulated events and SVG outputs. It does not
+start inference or contact Relay. Pinned comparisons last for the editor session.

@@ -51,6 +51,7 @@ import {
 } from '../graph';
 import { portTypeKey, type StudioMode } from '../ui';
 import type { NodeRunPreview } from '../run-preview';
+import type { NodeExecutionState } from '../canvas-execution';
 import type { CatalogEntry, EditorSidecar, JsonObject, WorkflowGraph } from '../types';
 import { EditorGroupNode, type EditorGroupFlowNode } from './EditorGroupNode';
 import { EditorNoteNode, type EditorNoteFlowNode } from './EditorNoteNode';
@@ -75,6 +76,10 @@ interface GraphCanvasProps {
   selectedOutputName: string | null;
   selectedEditorItemId: string | null;
   previews: Record<string, NodeRunPreview>;
+  execution: Record<string, NodeExecutionState>;
+  pinnedPreviews: Record<string, NodeRunPreview>;
+  onPinPreview: (nodeId: string) => void;
+  onUnpinPreview: (nodeId: string) => void;
   mode: StudioMode;
   artifactBlob: (runId: string, path: string, contentType?: string) => Promise<Blob>;
   inputAssetBlob: (path: string, contentType?: string) => Promise<Blob>;
@@ -318,6 +323,7 @@ export function GraphCanvas({
   selectedOutputName,
   selectedEditorItemId,
   previews,
+  execution, pinnedPreviews, onPinPreview, onUnpinPreview,
   mode,
   artifactBlob,
   inputAssetBlob,
@@ -376,6 +382,10 @@ export function GraphCanvas({
           ordinal: index + 1,
           mode,
           preview: previews[value.id],
+          execution: execution[value.id],
+          pinnedPreview: pinnedPreviews[value.id],
+          onPinPreview: () => onPinPreview(value.id),
+          onUnpinPreview: () => onUnpinPreview(value.id),
           artifactBlob,
           availableModels,
           onRaceModels,
@@ -463,6 +473,7 @@ export function GraphCanvas({
     },
     [
       catalog,
+      execution, pinnedPreviews, onPinPreview, onUnpinPreview,
       artifactBlob,
       graph,
       inputAssetBlob,
@@ -493,7 +504,19 @@ export function GraphCanvas({
   // select on click), and resync it whenever the derived nodes change — node
   // drags are still persisted to the sidecar on drag-stop.
   const [nodes, setNodes] = useState<StudioFlowNode[]>(derivedNodes);
-  useEffect(() => { setNodes(derivedNodes); }, [derivedNodes]);
+  useEffect(() => {
+    setNodes((current) => {
+      const previous = new Map(current.map((node) => [node.id, node]));
+      return derivedNodes.map((node) => {
+        const prior = previous.get(node.id);
+        // Catalog arrival can add handles without changing the card size.
+        // Let React Flow measure those handles again; preserve measurements
+        // for data-only updates so output events do not reobserve every node.
+        if (node.type === 'workflow' && prior?.type === 'workflow' && prior.data.entry !== node.data.entry) return node;
+        return { ...prior, ...node };
+      });
+    });
+  }, [derivedNodes]);
   const onNodesChange = useCallback<OnNodesChange<StudioFlowNode>>(
     (changes) => setNodes((current) => applyNodeChanges(changes, current)),
     [],

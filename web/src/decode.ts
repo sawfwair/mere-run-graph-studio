@@ -541,7 +541,8 @@ export function decodeRunEvent(value: unknown, path = 'run event'): RunEvent {
     phase: optionalString(source.phase, `${path}.phase`),
     state: optionalString(source.state, `${path}.state`),
     node_id: optionalString(source.node_id, `${path}.node_id`),
-    progress: optionalNumber(source.progress, `${path}.progress`),
+    progress: source.progress == null ? undefined : typeof source.progress === 'number'
+      ? numberValue(source.progress, `${path}.progress`) : decodeJsonObject(source.progress, `${path}.progress`),
     metric: source.metric,
   };
 }

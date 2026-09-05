@@ -8,6 +8,7 @@ export default defineConfig({
       include: [
         'src/app-mode.ts',
         'src/cloud-contract.ts',
+        'src/canvas-execution.ts',
         'src/decode.ts',
         'src/graph.ts',
         'src/model-install.ts',

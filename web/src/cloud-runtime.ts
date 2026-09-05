@@ -445,12 +445,11 @@ export class CloudRuntime implements StudioRuntime {
       ? (await eventsResponse.text()).split('\n').filter(Boolean).map((line, index) => decodeRunEvent(parseJsonValue(line, `run event line ${index + 1}`)))
       : [];
     let manifest: JsonValue | undefined;
-    if (run.state === 'finished') {
-      try {
-        manifest = await this.request(`/api/relay/api/graph-jobs/${encodeURIComponent(id)}/run-manifest`, decodeJsonValue);
-      } catch {
-        manifest = undefined;
-      }
+    try {
+      manifest = await this.request(`/api/relay/api/graph-jobs/${encodeURIComponent(id)}/run-manifest`, decodeJsonValue);
+    } catch {
+      // A worker may publish its manifest only after execution finishes.
+      manifest = undefined;
     }
     return studioRun(run, events, manifest);
   }

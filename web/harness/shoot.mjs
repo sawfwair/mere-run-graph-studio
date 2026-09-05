@@ -170,11 +170,67 @@ async function verifyNodePromptEditing() {
   await page.locator('.canvas-run-preview').waitFor();
   if (await page.getByRole('textbox', { name: 'Prompt for render', exact: true }).count()) throw new Error('Connected prompts must not expose a literal editor');
   await page.getByRole('textbox', { name: 'Value for description', exact: true }).fill('Updated description');
-  await page.locator('.canvas-run-preview').waitFor({ state: 'detached' });
+  await page.locator('.output-caption').filter({ hasText: 'Previous run' }).waitFor();
   await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 4);
-  console.log('✓ inline prompt editing, undo, connected values, and preview invalidation');
+  console.log('✓ inline prompt editing, undo, connected values, and previous-run labeling');
 }
 
+async function verifyLiveCanvas() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?live=failed`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  const render = page.locator('.react-flow__node-workflow[data-id="render"]');
+  const clip = page.locator('.react-flow__node-workflow[data-id="clip"]');
+  await render.getByRole('progressbar', { name: 'Reported inference progress' }).waitFor();
+  if (await page.getByRole('tab', { name: 'Canvas', exact: true }).getAttribute('aria-selected') !== 'true') throw Error('Starting a workflow must stay on the canvas');
+  await page.screenshot({ path: resolve(outDir, 'live-running.png') });
+  await render.locator('.canvas-run-preview img').waitFor();
+  await clip.locator('.node-execution-phase').filter({ hasText: 'encoding' }).waitFor();
+  if (await clip.getByRole('progressbar').count()) throw Error('A phase without numeric progress must not display a percentage');
+  await page.screenshot({ path: resolve(outDir, 'live-upstream-output.png') });
+  await page.locator('.canvas-run-summary strong').filter({ hasText: 'Failed' }).waitFor();
+  if (!await render.locator('.canvas-run-preview img').isVisible()) throw Error('Downstream failure must preserve upstream media');
+  await render.getByRole('button', { name: 'Pin output', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Prompt for render', exact: true }).fill('A blue car at dusk');
+  await render.locator('.output-caption').filter({ hasText: 'Previous run' }).waitFor();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.locator('.canvas-run-summary strong').filter({ hasText: 'Failed' }).waitFor();
+  await render.getByRole('button', { name: 'Compare outputs', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Compare outputs', exact: true });
+  await dialog.locator('img').first().waitFor();
+  for (const summary of await dialog.locator('summary').all()) await summary.click();
+  await dialog.getByText('a red sports car', { exact: true }).waitFor();
+  await dialog.getByText('A blue car at dusk', { exact: true }).waitFor();
+  await page.screenshot({ path: resolve(outDir, 'live-comparison.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await dialog.evaluate((element) => element.scrollWidth > element.clientWidth + 1)) throw Error('Mobile comparison must not overflow horizontally');
+  await page.screenshot({ path: resolve(outDir, 'live-comparison-mobile.png') });
+  await page.keyboard.press('Escape');
+  await dialog.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await render.getByRole('progressbar').waitFor();
+  await page.screenshot({ path: resolve(outDir, 'live-running-mobile.png') });
+  await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
+  await page.locator('.canvas-run-summary strong').filter({ hasText: 'Cancelled' }).waitFor();
+  console.log('✓ live progress, early outputs, failure retention, pinned comparison, mobile dialog, and cancellation');
+}
+
+async function verifyLiveRecovery() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?live=faults`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByText('Updates disconnected.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
+  await page.getByRole('progressbar', { name: 'Reported inference progress' }).waitFor();
+  await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
+  await page.getByText('Cancellation failed.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
+  await page.locator('.canvas-run-summary strong').filter({ hasText: 'Cancelled' }).waitFor();
+  console.log('✓ disconnected updates reconnect and failed cancellation can be retried');
+}
+
+await verifyLiveCanvas();
+await verifyLiveRecovery();
 await verifyNodePromptEditing();
 await verifyInspectorCanvasInteraction();
 await verifyLibraryAndOutline();
@@ -218,4 +274,4 @@ if (browserErrors.length) throw new Error(`Browser errors:\n${browserErrors.join
 
 await browser.close();
 await server.close();
-console.log(`\nWrote ${shots.length + 2} shot(s) to ${outDir}`);
+console.log(`\nWrote ${shots.length + 7} shot(s) to ${outDir}`);
