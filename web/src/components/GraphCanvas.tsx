@@ -30,6 +30,8 @@ import {
   connectOrderingDependency,
   disconnectNodeInput,
   disconnectOrderingDependency,
+  EDITOR_COLUMN_SPACING,
+  EDITOR_ROW_SPACING,
   editorGroupName,
   editorGroupNodeId,
   editorNoteName,
@@ -367,7 +369,7 @@ export function GraphCanvas({
       const workflowNodes: WorkflowFlowNode[] = graph.nodes.map((value, index) => ({
         id: value.id,
         type: 'workflow',
-        position: sidecar.nodes[value.id] ?? { x: 80 + (index % 3) * 320, y: 80 + Math.floor(index / 3) * 210 },
+        position: sidecar.nodes[value.id] ?? { x: 80 + (index % 3) * EDITOR_COLUMN_SPACING, y: 80 + Math.floor(index / 3) * EDITOR_ROW_SPACING },
         data: {
           value,
           entry: catalogEntryFor(value, catalog),
@@ -396,7 +398,7 @@ export function GraphCanvas({
       const outputNodes: GraphOutputFlowNode[] = Object.entries(graph.outputs).map(([name, reference], index) => ({
         id: graphOutputNodeId(name),
         type: 'graph-output',
-        position: sidecar.outputs?.[name] ?? { x: 80 + ((graph.nodes.length % 3) + 1) * 320, y: 80 + index * 86 },
+        position: sidecar.outputs?.[name] ?? { x: 80 + ((graph.nodes.length % 3) + 1) * EDITOR_COLUMN_SPACING, y: 80 + index * 112 },
         data: {
           name,
           reference,
@@ -668,6 +670,7 @@ export function GraphCanvas({
       onNodesChange={onNodesChange}
       nodeTypes={nodeTypes}
       defaultViewport={sidecar.viewport}
+      fitView={window.matchMedia('(max-width: 1080px)').matches}
       minZoom={0.25}
       maxZoom={1.8}
       fitViewOptions={{ padding: 0.2, maxZoom: 1.1 }}
@@ -739,7 +742,7 @@ export function GraphCanvas({
       proOptions={{ hideAttribution: true }}
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="var(--canvas-dot)" />
-      <Controls position="bottom-left" showInteractive={false} />
+      <Controls position="bottom-left" orientation="horizontal" showInteractive={false} />
       {mode === 'pro' ? (
         <MiniMap
           position="bottom-right"

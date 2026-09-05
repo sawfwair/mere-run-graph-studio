@@ -78,8 +78,8 @@ export function ProgramView({ program, graph, catalog, selectedNodeIds, busy, on
     <div className="program-view">
       <header className="program-toolbar">
         <label className="field"><span>Program name</span><input value={program.name} onChange={(event) => onChange({ ...program, name: event.target.value })} /></label>
-        <button className="command-button" disabled={!selectedNodeIds.length} onClick={addModule}><ListPlus size={14} /> Module from selection</button>
-        <button className="command-button primary" disabled={busy || !program.steps.length} onClick={onCompile}><PlayCircle size={14} /> Compile graph</button>
+        <button className="command-button" disabled={!selectedNodeIds.length} onClick={addModule}><ListPlus size={14} /> Create module from selection</button>
+        <button className="command-button primary" disabled={busy || !program.steps.length} onClick={onCompile}><PlayCircle size={14} /> Compile workflow</button>
       </header>
       <div className="program-columns">
         <section className="program-lane">
@@ -93,7 +93,7 @@ export function ProgramView({ program, graph, catalog, selectedNodeIds, busy, on
           ))}
         </section>
         <section className="program-lane steps">
-          <div className="program-lane-heading"><GitBranch size={14} /><strong>Compile steps</strong><span>{program.steps.length}</span></div>
+          <div className="program-lane-heading"><GitBranch size={14} /><strong>Program steps</strong><span>{program.steps.length}</span></div>
           {program.steps.map((step) => {
             const module = program.modules[step.module];
             const mode = branchMode(step);

@@ -34,8 +34,9 @@ function ProgressIcon({ done, failed }: { done: boolean; failed: boolean }): Rea
 
 function progressTitle(pull: ModelPull): string {
   if (pull.state === 'installed') return 'Installed';
-  if (pull.state === 'failed') return 'Install failed';
-  return pull.state === 'installing' ? 'Finishing install…' : 'Downloading…';
+  if (pull.state === 'failed') return 'Installation failed';
+  if (pull.state === 'preparing') return 'Preparing installation';
+  return pull.state === 'installing' ? 'Finishing installation' : 'Downloading';
 }
 
 function ProgressBar({ fraction, visible }: { fraction: number | null; visible: boolean }): ReactElement | null {
@@ -81,7 +82,7 @@ function PreflightSummary({ summary, choice, onChoice }: {
   return (
     <div className="model-install-body">
       {summary.summary ? <p className="model-install-summary">{summary.summary}</p> : null}
-      {summary.installed ? <p className="model-install-summary"><CheckCircle2 size={14} /> Already installed.</p> : null}
+      {summary.installed ? <p className="model-install-summary"><CheckCircle2 size={14} /> Model installed.</p> : null}
       <div className="model-install-facts">
         {summary.downloadBytes !== null ? <span className="model-install-fact"><Download size={13} /> {formatBytes(summary.downloadBytes)} download</span> : null}
         {summary.availableBytes !== null ? <span className="model-install-fact"><HardDrive size={13} /> {formatBytes(summary.availableBytes)} free</span> : null}
@@ -107,7 +108,7 @@ function PreflightSummary({ summary, choice, onChoice }: {
             checked={choice.allowUnsupported}
             onChange={(event) => onChoice({ ...choice, allowUnsupported: event.target.checked })}
           />
-          <span><ShieldAlert size={13} /> This model isn’t verified for this hardware — install anyway.</span>
+          <span><ShieldAlert size={13} /> Install this model even though it is not verified for this hardware.</span>
         </label>
       ) : null}
     </div>
@@ -124,13 +125,13 @@ function InstallBody({ model, pull, preflightError, summary, choice, onChoice }:
 }): ReactElement {
   if (pull) return <InstallProgress pull={pull} />;
   if (preflightError) return <div className="model-install-body"><p className="model-install-blocker"><AlertTriangle size={14} /> {preflightError}</p></div>;
-  if (!summary) return <div className="model-install-body loading"><Loader2 size={18} className="spin" /> <span>Inspecting {model}…</span></div>;
+  if (!summary) return <div className="model-install-body loading"><Loader2 size={18} className="spin" /> <span>Checking {model}</span></div>;
   return <PreflightSummary summary={summary} choice={choice} onChoice={onChoice} />;
 }
 
 function confirmTitle(model: string, termsUnmet: boolean, hardBlocked: boolean): string {
-  if (termsUnmet) return 'Accept the usage terms first';
-  if (hardBlocked) return 'Resolve the blocker first';
+  if (termsUnmet) return 'To install this model, accept the usage terms';
+  if (hardBlocked) return 'To install this model, resolve the reported issue';
   return `Install ${model}`;
 }
 
@@ -154,7 +155,7 @@ function InstallActions({ model, pull, installing, starting, disabled, termsUnme
       <button className="command-button" onClick={onClose}>Done</button>
     </footer>;
   }
-  if (installing) return <footer className="model-install-actions"><span className="model-install-hint">Installing in the background — you can keep working.</span></footer>;
+  if (installing) return <footer className="model-install-actions"><span className="model-install-hint">Wait for the installation to finish.</span></footer>;
   return <footer className="model-install-actions">
     <button className="command-button subtle" onClick={onClose} disabled={starting}>Cancel</button>
     <button
@@ -232,7 +233,7 @@ export function ModelInstallSheet(props: ModelInstallSheetProps): ReactElement {
             <small>{scope === 'cloud' ? 'Install on your fleet' : 'Install on this machine'}</small>
           </div>
           {closable ? (
-            <button className="icon-button small" onClick={onClose} aria-label="Close"><X size={16} /></button>
+            <button className="icon-button small" onClick={onClose} aria-label="Close model installation"><X size={16} /></button>
           ) : null}
         </header>
 

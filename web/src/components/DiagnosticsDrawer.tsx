@@ -71,7 +71,7 @@ function DiagnosticStatusbar({ open, title, severity, counts, mode, nodeCount, e
 }) {
   return (
     <div className="statusbar">
-      <button className="statusbar-main" onClick={onToggle} aria-expanded={open} aria-label="Toggle diagnostics">
+      <button className="statusbar-main" onClick={onToggle} aria-expanded={open} aria-label={open ? 'Hide diagnostics' : 'Show diagnostics'}>
         <span className={`drawer-state ${severity}`} />
         <strong>{title}</strong>
         {open ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
@@ -83,13 +83,13 @@ function DiagnosticStatusbar({ open, title, severity, counts, mode, nodeCount, e
       <div className="statusbar-stats">
         <span>{nodeCount} {nodeCount === 1 ? 'node' : 'nodes'}</span>
         <i />
-        <span>{edgeCount} {edgeCount === 1 ? 'link' : 'links'}</span>
+        <span>{edgeCount} {edgeCount === 1 ? 'connection' : 'connections'}</span>
         {mode === 'pro' ? <><i /><span className="statusbar-executor">{executor}</span></> : null}
       </div>
       <div className="statusbar-right">
         <span className={`mode-flag ${mode}`}>{mode === 'easy' ? 'Easy mode' : 'Pro mode'}</span>
         <span className="kbd-hint" title="Command palette"><Command size={11} />K</span>
-        <button className="icon-button small ghost" onClick={onOpenHelp} title="Shortcuts & tips" aria-label="Shortcuts and tips"><CircleHelp size={14} /></button>
+        <button className="icon-button small ghost" onClick={onOpenHelp} title="Shortcuts and tips" aria-label="Shortcuts and tips"><CircleHelp size={14} /></button>
       </div>
     </div>
   );
@@ -118,7 +118,7 @@ function DiagnosticList({ diagnostics, visible, filter, counts, onFilter, onSele
           </div>
         );
       })}
-      {!visible.length ? <div className="empty-state">Nothing here — you’re all clear.</div> : null}
+      {!visible.length ? <div className="empty-state">No diagnostics match this filter.</div> : null}
     </div>
   );
 }

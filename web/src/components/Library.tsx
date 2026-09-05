@@ -71,6 +71,7 @@ export function Library({
 }: LibraryProps): ReactElement {
   const [tab, setTab] = useState<LibraryTab>('nodes');
   const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryKey | 'all'>('all');
   const userPicked = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const [focusSearchIntent, setFocusSearchIntent] = useState(false);
@@ -155,7 +156,8 @@ export function Library({
   }
 
   return (
-    <aside className="library-panel">
+    <aside className="library-panel" aria-label="Library">
+      <div className="library-intro"><span className="workspace-eyebrow">Workflow components</span><h2>Node library</h2><p>Add nodes to build your workflow.</p></div>
       <div className="panel-tabs" role="tablist">
         {tabs.map((item) => (
           <button
@@ -176,10 +178,16 @@ export function Library({
         <div className="library-body">
           <label className="search-field">
             <Search size={14} />
-            <input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes…" />
+            <input ref={searchInput} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search nodes" aria-label="Search nodes" />
           </label>
+          <div className="category-filters" role="group" aria-label="Filter nodes by category">
+            <button aria-pressed={categoryFilter === 'all'} onClick={() => setCategoryFilter('all')}>All nodes</button>
+            {categoryOrder.filter((category) => catalog.some((entry) => categoryKey(entry.category) === category)).map((category) => (
+              <button key={category} aria-pressed={categoryFilter === category} onClick={() => setCategoryFilter(category)}>{categoryTitle(category)}</button>
+            ))}
+          </div>
           <div className="catalog-list">
-            {[...groups.entries()]
+            {[...groups.entries()].filter(([category]) => categoryFilter === 'all' || categoryFilter === category)
               .sort(([left], [right]) => categoryOrder.indexOf(left) - categoryOrder.indexOf(right))
               .map(([category, entries]) => {
                 const Icon = categoryIcons[category];
@@ -199,7 +207,7 @@ export function Library({
                           event.dataTransfer.effectAllowed = 'copy';
                         }}
                         onClick={() => onAddNode(entry)}
-                        title={mode === 'easy' ? 'Click to add, or drag onto the canvas' : entry.kind}
+                        title={mode === 'easy' ? 'To add this node, select it or drag it onto the canvas' : entry.kind}
                       >
                         <span className="catalog-icon"><Icon size={15} strokeWidth={1.9} /></span>
                         <span className="catalog-copy">
@@ -223,15 +231,15 @@ export function Library({
                 );
               })}
             {!catalog.length ? <div className="empty-state"><Cpu size={18} /> Catalog unavailable</div> : null}
-            {catalog.length && ![...groups.values()].some((entries) => entries.length) ? (
-              <div className="empty-state">No nodes match “{query}”</div>
+            {catalog.length && ![...groups.entries()].some(([category, entries]) => entries.length && (categoryFilter === 'all' || categoryFilter === category)) ? (
+              <div className="empty-state">No matching nodes. Try another search or category.</div>
             ) : null}
           </div>
         </div>
       ) : tab === 'inputs' ? (
         <div className="library-body">
           <div className="panel-heading">
-            <strong>Graph inputs</strong>
+            <strong>Workflow inputs</strong>
             <button className="icon-button small" onClick={onAddInput} title="Add input" aria-label="Add input"><Plus size={15} /></button>
           </div>
           <div className="input-list">
@@ -248,7 +256,7 @@ export function Library({
             {!Object.keys(graph.inputs).length ? (
               <div className="empty-state">
                 {mode === 'easy'
-                  ? 'Inputs are the blanks a workflow asks you to fill in before running.'
+                  ? <>Workflow inputs provide values when you run the workflow. To create an input, select <strong>Add input</strong>.</>
                   : 'No graph inputs'}
               </div>
             ) : null}
@@ -257,7 +265,7 @@ export function Library({
       ) : (
         <div className="library-body">
           <div className="panel-heading">
-            <strong>{mode === 'easy' ? 'Start from a template' : 'Workflow templates'}</strong>
+            <strong>{mode === 'easy' ? 'Choose a template' : 'Workflow templates'}</strong>
             <span className="panel-actions">
               {mode === 'pro' ? (
                 <button
@@ -292,7 +300,7 @@ export function Library({
                 </span>
               </button>
             ))}
-            {!workflowToolsAvailable ? <div className="empty-state">Workflow tools unavailable — templates and ComfyUI import are disabled.</div> : null}
+            {!workflowToolsAvailable ? <div className="empty-state">Templates and ComfyUI import are unavailable in this environment.</div> : null}
             {workflowToolsAvailable && !templates.length ? <div className="empty-state">No templates</div> : null}
           </div>
         </div>

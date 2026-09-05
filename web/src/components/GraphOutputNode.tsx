@@ -38,6 +38,7 @@ function GraphOutputNodeView({ data, selected }: NodeProps<GraphOutputFlowNode>)
       />
       <span className="graph-output-icon"><LogOut size={14} /></span>
       <span>
+        <small className="graph-output-label">Workflow output</small>
         <strong>{data.name}</strong>
         <small>{data.reference.$ref}</small>
       </span>

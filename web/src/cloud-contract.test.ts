@@ -8,6 +8,7 @@ import materialAssets from '../../contracts/fixtures/graph-v1/creative-materials
 import materialGraph from '../../contracts/fixtures/graph-v1/creative-materials.workflow.json';
 import materialInputs from '../../contracts/fixtures/graph-v1/creative-materials.inputs.json';
 import { buildGraphSubmission, canonicalJson, sha256Canonical } from './cloud-contract';
+import { decodeWorkflowGraph } from './decode';
 import type { WorkflowGraph } from './types';
 
 describe('cloud graph contract', () => {
@@ -17,6 +18,16 @@ describe('cloud graph contract', () => {
     expect(await sha256Canonical(materialGraph)).toBe(compatibility.material_fixture.graph_fingerprint);
     expect(await sha256Canonical({ inputs: materialInputs, assets: materialAssets })).toBe(compatibility.material_fixture.input_fingerprint);
     expect(canonicalJson({ z: 'é', a: 1 })).toBe('{"a":1,"z":"\\u00e9"}');
+  });
+
+  it('preserves fingerprints when decoded graphs contain absent optional fields', async () => {
+    const decodedGraph = decodeWorkflowGraph(graph);
+    const decodedMaterials = decodeWorkflowGraph(materialGraph);
+    expect(canonicalJson(decodedGraph)).toBe(canonicalJson(graph));
+    expect(canonicalJson(decodedMaterials)).toBe(canonicalJson(materialGraph));
+    expect(await sha256Canonical(decodedGraph)).toBe(compatibility.canonical_fixture.graph_fingerprint);
+    expect(await sha256Canonical(decodedMaterials)).toBe(compatibility.material_fixture.graph_fingerprint);
+    expect(canonicalJson({ absent: undefined, present: null })).toBe('{"present":null}');
   });
 
   it('materializes an immutable Relay submission from the live Node catalog', async () => {

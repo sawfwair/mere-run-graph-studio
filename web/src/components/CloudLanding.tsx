@@ -80,7 +80,7 @@ const SHOWCASE_CATALOG: CatalogEntry[] = [
   },
   {
     kind: 'video.generate',
-    title: 'Animate to video',
+    title: 'Generate video',
     category: 'video',
     provider: { id: 'mere.run' },
     inputs: [
@@ -111,7 +111,7 @@ const SHOWCASE_VALUES: {
   {
     id: 'seed',
     kind: 'seed.value',
-    position: { x: 0, y: 330 },
+    position: { x: 0, y: 410 },
     arguments: { seed: 11 },
   },
   {
@@ -144,7 +144,7 @@ const SHOWCASE_VALUES: {
 ];
 
 const SHOWCASE_EDGES: Edge[] = [
-  { id: 'prompt-frame', source: 'prompt', sourceHandle: 'text', target: 'frame', targetHandle: 'prompt', className: 'edge-t-text', animated: true },
+  { id: 'prompt-frame', source: 'prompt', sourceHandle: 'text', target: 'frame', targetHandle: 'prompt', className: 'edge-t-text' },
   { id: 'prompt-motion', source: 'prompt', sourceHandle: 'text', target: 'motion', targetHandle: 'prompt', className: 'edge-t-text' },
   { id: 'seed-frame', source: 'seed', sourceHandle: 'seed', target: 'frame', targetHandle: 'seed', className: 'edge-t-number' },
   { id: 'frame-detail', source: 'frame', sourceHandle: 'image', target: 'detail', targetHandle: 'image', className: 'edge-t-asset' },
@@ -231,7 +231,7 @@ function ShowcaseCanvas() {
           onNodesChange={onNodesChange}
           fitView
           fitViewOptions={{ padding: 0.1 }}
-          minZoom={0.35}
+          minZoom={0.1}
           maxZoom={1.2}
           nodesConnectable={false}
           zoomOnScroll={false}
@@ -248,10 +248,10 @@ function ShowcaseCanvas() {
         </ReactFlow>
       </div>
       <div className="cloud-window-status">
-        <span className="status-ready"><i /> Ready</span>
-        <span>5 nodes · 5 links</span>
-        <span className="status-hint">Live editor components. Type in the prompt card; it feeds both generators.</span>
-        <span className="status-mode">{mode === 'easy' ? 'EASY MODE' : 'PRO MODE'}</span>
+        <span className="status-ready"><i /> Example workflow</span>
+        <span>5 nodes · 5 connections</span>
+        <span className="status-hint">Edit the prompt value or drag a node to explore the canvas.</span>
+        <span className="status-mode">{mode === 'easy' ? 'Easy mode' : 'Pro mode'}</span>
       </div>
     </section>
   );
@@ -261,57 +261,57 @@ const CAPABILITIES = [
   {
     icon: Workflow,
     title: 'Typed canvas',
-    body: 'Ports carry types; incompatible connections don’t attach. Any argument can hold a constant, a reference to another node’s output, or a named secret. The same document is editable as JSON, one tab over.',
+    body: 'Connect nodes with compatible input and output types. Arguments support fixed values, output references, and named secret references. To edit the workflow document, open JSON.',
   },
   {
     icon: PenLine,
-    title: 'Creative materials',
-    body: 'Prompts, seeds, numbers, and choices can live as cards on the canvas and feed several nodes at once. Promote any argument to a material with one action, and inline it back the same way.',
+    title: 'Reusable values',
+    body: 'Use value nodes to share prompts, seeds, numbers, and choices across a workflow. To create a value node, select a supported constant in the inspector.',
   },
   {
     icon: GitBranch,
     title: 'Programs',
-    body: 'Reusable programs with map and branch compile down to plain graphs. The Program view shows what they expand into before anything runs.',
+    body: 'Create reusable programs with map and branch steps. In Program, compile the program and inspect the resulting workflow before you run it.',
   },
   {
     icon: CloudCog,
     title: 'Preflight',
-    body: 'Check a workflow against an executor before running it, or compare several side by side. Missing models appear as actions you approve; nothing downloads on its own.',
+    body: 'Before you run a workflow, check its requirements against an executor or compare multiple executors. Review missing models and other proposed actions in Prepare.',
   },
   {
     icon: Play,
     title: 'Run inspection',
-    body: 'Each run keeps a per-node timeline with attempts, logs, cache evidence, and receipts. Image, video, and audio artifacts preview inline, and results appear on the node that produced them.',
+    body: 'Inspect recorded attempts, logs, cache information, and operation receipts for each run. Preview supported image, video, and audio outputs in the run details or on their nodes.',
   },
   {
     icon: LayoutTemplate,
-    title: 'Templates and Comfy import',
-    body: 'Start from a template with a fill-in form, publish your own locally, or import a ComfyUI API prompt. Comfy nodes that don’t map are listed by name instead of guessed at.',
+    title: 'Templates and ComfyUI import',
+    body: 'With workflow tools configured, load or publish a template, or import a ComfyUI API prompt. Import reports identify ComfyUI nodes without a supported mapping.',
   },
   {
     icon: FileOutput,
-    title: 'One-file projects',
-    body: 'A project exports as a single .meregraph.json holding the graph, inputs, program, and editor state. Importing it elsewhere reproduces the workspace exactly.',
+    title: 'Project files',
+    body: 'Export a .meregraph.json project file with the workflow, input values, program, and editor settings. Import the file to continue editing on another machine.',
   },
   {
     icon: History,
-    title: 'Editor fundamentals',
-    body: 'Undo and redo across the whole document, dirty-state tracking, recovery after a crash, a ⌘K command palette, and keyboard access to everything.',
+    title: 'Editing and recovery',
+    body: 'Undo and redo document changes, track unsaved edits, and recover local work after an interruption. Use the command palette to find actions and nodes.',
   },
 ];
 
 const STEPS = [
   {
     title: 'Author',
-    body: 'Wire nodes and material cards on the canvas, or open a template. Validation uses the same schemas the CLI enforces, so the editor can’t produce a file the runtime rejects.',
+    body: 'Add nodes to the canvas or load a template. To check the workflow against the runtime schema, select Validate in Pro mode or Check in Easy mode.',
   },
   {
     title: 'Prepare',
-    body: 'Pick an executor and preflight it. The report lists capability gaps, resource requirements, and the model actions a run would need, before anything is committed.',
+    body: 'Choose an executor and select Preflight. Review the reported capabilities, resource requirements, and model actions before you run the workflow.',
   },
   {
     title: 'Run',
-    body: 'Execute locally, over SSH, or through Relay, which leases the job to one paired Node. Artifacts, hashes, and receipts come back into the same timeline you authored in.',
+    body: 'In the desktop app, run workflows locally, over SSH, or through Relay. In the hosted editor, use Relay. Inspect returned artifacts, hashes, and receipts in Runs.',
   },
 ];
 
@@ -321,28 +321,27 @@ export function CloudLanding(): ReactElement {
       <nav className="cloud-nav">
         <a className="cloud-brand" href="/"><span className="cloud-brand-mark"><img src="/brand/mark.svg" alt="" /></span><strong>mere.run</strong><span>Graph Studio</span></a>
         <div className="cloud-nav-actions">
-          <a className="cloud-link" href="https://docs.mere.run/workflows">Docs</a>
+          <a className="cloud-link" href="https://docs.mere.run/workflows">Documentation</a>
           <a className="cloud-button quiet" href="https://docs.mere.run/graph/studio#desktop-studio"><Download size={15} /> Desktop app</a>
-          <a className="cloud-button" href="/auth/start?return_to=%2Fapp">Open Studio <ArrowRight size={15} /></a>
+          <a className="cloud-button" href="/auth/start?return_to=%2Fapp">Open Graph Studio <ArrowRight size={15} /></a>
         </div>
       </nav>
 
       <section className="cloud-hero">
         <div className="cloud-eyebrow"><span /> Graph Studio</div>
-        <h1>AI pipelines on a canvas,<br /><em>run on your own GPUs.</em></h1>
+        <h1>Build AI workflows <em>on your machines</em></h1>
         <p>
-          Graph Studio edits mere.run workflow documents: typed nodes for image, video,
-          audio, and text, wired together visually. The file you author here runs unchanged
-          on your workstation, over SSH, or on machines you’ve paired through Relay.
-          Models never execute in the browser.
+          Connect image, video, audio, and text nodes to create mere.run workflows.
+          Use the desktop app to run workflows on your workstation or over SSH.
+          To run workflows from the browser, connect your machines through Relay.
         </p>
         <div className="cloud-hero-actions">
-          <a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Open Studio <ArrowRight size={17} /></a>
+          <a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Open Graph Studio <ArrowRight size={17} /></a>
           <a className="cloud-button quiet large" href="https://docs.mere.run/graph/studio#desktop-studio"><Download size={16} /> Download the desktop app</a>
         </div>
         <div className="cloud-proof">
-          <span><ShieldCheck size={15} /> Projects scoped to your account</span>
-          <span><Cpu size={15} /> Compute stays on your Nodes</span>
+          <span><ShieldCheck size={15} /> Projects saved to your account</span>
+          <span><Cpu size={15} /> Models run on your machines</span>
           <span><Monitor size={15} /> Desktop app works offline</span>
         </div>
       </section>
@@ -352,25 +351,25 @@ export function CloudLanding(): ReactElement {
       <section className="cloud-modes" aria-label="Easy and Pro modes">
         <header className="cloud-section-heading">
           <h2>Easy mode and Pro mode</h2>
-          <p>The toggle changes what’s on screen, not the document. Both modes read and write the same files, byte for byte.</p>
+          <p>Choose how many settings the editor displays. Both modes use the same workflow format.</p>
         </header>
         <div className="cloud-modes-grid">
           <article className="cloud-mode-card easy">
             <h3><Sparkles size={16} /> Easy</h3>
-            <p>Templates, required settings, sliders, and plain labels. Wiring appears as “linked to” chips instead of reference paths.</p>
+            <p>Use templates and essential settings with descriptive labels. Connected inputs show the source node and output.</p>
             <ul>
-              <li><CheckCircle2 size={13} /> Template gallery with fill-in forms</li>
-              <li><CheckCircle2 size={13} /> Required arguments up front, the rest behind one tap</li>
-              <li><CheckCircle2 size={13} /> Run and the executor picker stay visible</li>
+              <li><CheckCircle2 size={13} /> Templates with input forms</li>
+              <li><CheckCircle2 size={13} /> Essential settings with expandable advanced options</li>
+              <li><CheckCircle2 size={13} /> Run controls and execution target in the toolbar</li>
             </ul>
           </article>
           <article className="cloud-mode-card pro">
             <h3><SlidersHorizontal size={16} /> Pro</h3>
-            <p>Every argument by its real name and type, references and secrets, cache and retry control, and the raw JSON one tab over.</p>
+            <p>Inspect argument names and types, edit references, and configure cache and retry settings. Use JSON to edit the workflow document.</p>
             <ul>
               <li><CheckCircle2 size={13} /> Program, JSON, and Prepare views</li>
-              <li><CheckCircle2 size={13} /> Groups, notes, saved selections, auto-layout</li>
-              <li><CheckCircle2 size={13} /> Preflight several executors side by side</li>
+              <li><CheckCircle2 size={13} /> Groups, notes, saved selections, and automatic layout</li>
+              <li><CheckCircle2 size={13} /> Compare preflight results across executors</li>
             </ul>
           </article>
         </div>
@@ -378,8 +377,8 @@ export function CloudLanding(): ReactElement {
 
       <section className="cloud-caps" aria-label="Capabilities">
         <header className="cloud-section-heading">
-          <h2>In the current build</h2>
-          <p>A partial list. The README keeps the complete one.</p>
+          <h2>Workflow tools</h2>
+          <p>Build, validate, run, and inspect workflows in one workspace.</p>
         </header>
         <div className="cloud-caps-grid">
           {CAPABILITIES.map((capability) => (
@@ -395,7 +394,7 @@ export function CloudLanding(): ReactElement {
       <section className="cloud-steps" aria-label="How a run works">
         <header className="cloud-section-heading">
           <h2>How a run works</h2>
-          <p>Three files travel together: the workflow, its inputs, and an editor sidecar that never affects execution.</p>
+          <p>Keep the workflow, input values, and editor settings in separate documents. Editor settings control the layout without changing execution.</p>
         </header>
         <div className="cloud-steps-grid">
           {STEPS.map((step, index) => (
@@ -407,10 +406,10 @@ export function CloudLanding(): ReactElement {
           ))}
         </div>
         <div className="cloud-trust">
-          <span><Lock size={13} /> Tokens live in HttpOnly cookies</span>
-          <span><ShieldCheck size={13} /> No provider credentials stored</span>
-          <span><Braces size={13} /> Jobs are immutable once submitted</span>
-          <span><Network size={13} /> Node catalogs reported live through Relay</span>
+          <span><Lock size={13} /> Sign in to manage saved projects</span>
+          <span><ShieldCheck size={13} /> Workflows use named secret references</span>
+          <span><Braces size={13} /> Submitted jobs are immutable</span>
+          <span><Network size={13} /> Relay reports connected node catalogs</span>
         </div>
       </section>
 
@@ -418,29 +417,28 @@ export function CloudLanding(): ReactElement {
         <article className="cloud-split-card">
           <h3><Monitor size={16} /> Desktop</h3>
           <p>
-            A native app for macOS, Windows, and Linux. Authoring, validation, preflight,
-            and local runs work with no account and no network; Studio drives the
-            <code> mere.run</code> binary you installed. Sign-in exists only for cloud
-            features and is never triggered by local work.
+            Create and run workflows on macOS, Windows, and Linux with the installed
+            <code> mere.run</code> executable. Local workflows require no account.
+            Offline runs require the models, files, and dependencies to be available on your computer.
           </p>
-          <a className="cloud-button quiet" href="https://docs.mere.run/graph/studio#desktop-studio"><Download size={15} /> Download</a>
+          <a className="cloud-button quiet" href="https://docs.mere.run/graph/studio#desktop-studio"><Download size={15} /> Download the desktop app</a>
         </article>
         <article className="cloud-split-card">
           <h3><Command size={16} /> Hosted</h3>
           <p>
-            The same editor at studio.mere.run. Mere World handles identity, projects
-            persist per account, and runs are placed on Nodes you’ve paired. The
-            website schedules work; it never executes models.
+            Sign in with Mere World to save projects to your account.
+            To run a workflow, select a machine connected through Relay.
+            Models run on connected machines, not in the browser.
           </p>
-          <a className="cloud-button" href="/auth/start?return_to=%2Fapp">Open Studio <ArrowRight size={15} /></a>
+          <a className="cloud-button" href="/auth/start?return_to=%2Fapp">Open Graph Studio <ArrowRight size={15} /></a>
         </article>
       </section>
 
       <section className="cloud-cta">
-        <h2>Build your first workflow in the browser, or take the desktop app.</h2>
+        <h2>Choose where to build your workflow</h2>
         <div className="cloud-hero-actions">
-          <a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Open Studio <ArrowRight size={17} /></a>
-          <a className="cloud-button quiet large" href="https://docs.mere.run/workflows">Read the docs</a>
+          <a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Open Graph Studio <ArrowRight size={17} /></a>
+          <a className="cloud-button quiet large" href="https://docs.mere.run/workflows">Read the workflow documentation</a>
         </div>
       </section>
 
@@ -448,7 +446,7 @@ export function CloudLanding(): ReactElement {
         <span>Graph Studio is part of mere.run</span>
         <a href="https://mere.run">mere.run</a>
         <a href="https://mere.world">Mere World</a>
-        <a href="https://docs.mere.run">Docs</a>
+        <a href="https://docs.mere.run">Documentation</a>
       </footer>
     </main>
   );

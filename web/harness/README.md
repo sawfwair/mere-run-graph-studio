@@ -23,8 +23,10 @@ State is driven by URL query params:
 | `?right=1` | start with the inspector rail collapsed       |
 | `?mode=pro`| start in Pro mode (default: Easy)             |
 | `?empty=1` | start with an empty graph (default: 2-node)   |
+| `?example=1` | show reusable values, workflow inputs and outputs, and a recorded result |
+| `?landing=1` | show the hosted landing page |
 
-## Screenshot it
+## Capture screenshots
 
 ```bash
 pnpm harness:shoot                # verifies and captures desktop + mobile states
@@ -32,13 +34,15 @@ pnpm harness:shoot hero=mode=pro  # custom "name=query" shots
 ```
 
 - Output goes to `web/harness/shots/` (gitignored). Override with `HARNESS_OUT`.
-- The command fails on browser console errors or horizontal overflow at either
-  the 1600x1000 desktop viewport or the 390x844 mobile viewport.
+- The command checks inline prompt editing, undo, reference preservation,
+  preview invalidation, and library navigation. It also checks desktop, tablet,
+  and mobile layouts. Browser errors and horizontal overflow fail the check.
 - Uses installed Google Chrome on macOS when available, otherwise Playwright's
   managed Chromium. Override with `HARNESS_BROWSER=/path/to/chrome`.
 
 ## Extending
 
-- The catalog, canned project, and runtime stubs live in `mock-runtime.ts`.
-  If a surface you want to screenshot calls a runtime method that currently
-  throws, give it a canned return there.
+- The `mock-runtime.ts` file provides the catalog, project, and runtime stubs.
+  To review another runtime state, add a sample response to that file.
+- The `node-fixture.ts` file provides connected nodes and a recorded output
+  for the node design examples.

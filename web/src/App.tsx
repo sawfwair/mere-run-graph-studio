@@ -536,7 +536,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
       selectNode(result.materialNodeId);
     } catch (error) {
-      showError('Promotion blocked', error);
+      showError('Could not create a value node', error);
     }
   };
 
@@ -546,7 +546,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
       selectNode(result.deleted ? consumerNodeId ?? null : nodeId);
     } catch (error) {
-      showError('Inline blocked', error);
+      showError('Could not replace the reference', error);
     }
   };
 
@@ -556,7 +556,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
       selectNode(desired);
     } catch (error) {
-      showError('Rename blocked', error);
+      showError('Could not rename the item', error);
     }
   };
 
@@ -620,7 +620,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       commitDocument((current) => ({ ...current, graph: result.graph, inputs: result.values, sidecar: nextSidecar }));
       selectInput(desired);
     } catch (error) {
-      showError('Rename blocked', error);
+      showError('Could not rename the item', error);
     }
   };
 
@@ -696,7 +696,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
       selectOutput(desired);
     } catch (error) {
-      showError('Rename blocked', error);
+      showError('Could not rename the item', error);
     }
   };
 
@@ -740,7 +740,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setSidecar(result.sidecar);
       selectEditorItem(editorGroupNodeId(result.name));
     } catch (error) {
-      showError('Group failed', error);
+      showError('Could not group the nodes', error);
     }
   };
 
@@ -757,7 +757,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setDiagnosticTitle('Selection saved');
       setDiagnostics([{ severity: 'success', title: 'Selection saved', message: result.name }]);
     } catch (error) {
-      showError('Selection failed', error);
+      showError('Could not save the selection', error);
     }
   };
 
@@ -799,7 +799,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setProjects(result.projects);
       openDialog.current?.showModal();
     } catch (error) {
-      showError('Project list failed', error);
+      showError('Could not load the project list', error);
     }
   };
 
@@ -865,7 +865,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
         pushToast(
           'info',
           missing.length === 1 ? 'This graph needs a model you haven’t installed' : `This graph needs ${missing.length} models you haven’t installed`,
-          `${missing.join(', ')} — swap it on the node, run anyway, or run where it’s installed.`,
+          `${missing.join(', ')}. Choose another model on the node or use an executor with the required model.`,
         );
       }
     } catch (error) {
@@ -882,7 +882,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setTemplateDraft({ id: templateId, graph: template.graph, inputs: template.inputs, sidecar: template.sidecar });
       templateDialog.current?.showModal();
     } catch (error) {
-      showError('Template failed', error);
+      showError('Could not load the template', error);
     } finally {
       setBusy(null);
     }
@@ -944,7 +944,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setComfyReport(document.result);
       comfyDialog.current?.showModal();
     } catch (error) {
-      showError('Comfy inspection failed', error);
+      showError('ComfyUI inspection failed', error);
     } finally {
       setBusy(null);
     }
@@ -965,9 +965,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setDiagnostics(commandDiagnostics(imported.document, 'Comfy import'));
       setDrawerOpen(true);
       comfyDialog.current?.close();
-      pushToast('success', 'Comfy workflow imported', 'Review the import report in diagnostics.');
+      pushToast('success', 'ComfyUI workflow imported', 'Review the import report in diagnostics.');
     } catch (error) {
-      showError('Comfy import failed', error);
+      showError('ComfyUI import failed', error);
     } finally {
       setBusy(null);
     }
@@ -1073,7 +1073,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setVariations(started.map((run, index) => ({ label: values[index]?.label ?? `#${index + 1}`, run })));
       setVariationField(candidate.name);
       setRuns((current) => [...started, ...current.filter((item) => !started.some((run) => run.id === item.id))]);
-      pushToast('info', `Running ${started.length} variations`, `Sweeping ${candidate.label} on ${executor}`);
+      pushToast('info', `Running ${started.length} variations`, `Varying ${candidate.label} on ${executor}`);
     } catch (error) {
       showError('Variations failed', error);
     } finally {
@@ -1095,9 +1095,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setVariationField('model');
       setRuns((current) => [...started, ...current.filter((item) => !started.some((run) => run.id === item.id))]);
       setView('app');
-      pushToast('info', `Racing ${started.length} models`, `on ${executor}`);
+      pushToast('info', `Comparing ${started.length} models`, `on ${executor}`);
     } catch (error) {
-      showError('Model race failed', error);
+      showError('Model comparison failed', error);
     } finally {
       setVariationBusy(false);
     }
@@ -1146,7 +1146,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             void refreshInstalledModels();
             pushToast('info', 'Model installed', model);
           } else if (update.state === 'failed') {
-            pushToast('error', 'Install failed', update.detail ?? model);
+            pushToast('error', 'Installation failed', update.detail ?? model);
           }
         }, controller.signal);
       })
@@ -1205,9 +1205,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     try {
       setSelectedRun(await runtime.fetchRun(id, allArtifacts, artifactNames));
       await refreshRuns();
-      pushToast('success', 'Artifacts fetched', allArtifacts ? 'All artifacts copied locally.' : 'Selected outputs copied locally.');
+      pushToast('success', 'Artifacts downloaded', allArtifacts ? 'All artifacts downloaded.' : 'Selected outputs downloaded.');
     } catch (error) {
-      showError('Fetch failed', error);
+      showError('Download failed', error);
     }
   };
 
@@ -1238,7 +1238,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
         setInputs(decodeJsonObject(parseJsonValue(inputsText, 'inputs JSON')));
       }
       setJsonError(null);
-      pushToast('success', 'JSON applied', jsonDocument === 'workflow' ? 'Workflow graph updated.' : 'Input values updated.');
+      pushToast('success', 'JSON applied', jsonDocument === 'workflow' ? 'Workflow updated.' : 'Input values updated.');
       setView('canvas');
     } catch (error) {
       setJsonError(error instanceof Error ? error.message : String(error));
@@ -1283,7 +1283,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       pushToast(
         'info',
         next === 'easy' ? 'Easy mode' : 'Pro mode',
-        next === 'easy' ? 'Showing the essentials. Your graph is unchanged.' : 'Every graph and execution control is available.',
+        next === 'easy' ? 'The editor shows essential settings. Your workflow stays the same.' : 'The editor shows all workflow and execution settings.',
       );
       return next;
     });
@@ -1327,25 +1327,25 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       title: 'Actions',
       items: [
         { id: 'run', title: 'Run workflow', subtitle: `on ${executor}`, hint: '⌘⏎', icon: <Play size={14} />, run: () => void runGraph() },
-        { id: 'app', title: 'Run as App', subtitle: 'A form-and-gallery surface from your inputs', icon: <AppWindow size={14} />, run: () => setView('app') },
-        { id: 'validate', title: mode === 'easy' ? 'Check workflow' : 'Validate graph', icon: <Check size={14} />, run: () => void checkGraph('validate') },
+        { id: 'app', title: 'Run as app', subtitle: 'Run the workflow with a form and view the results', icon: <AppWindow size={14} />, run: () => setView('app') },
+        { id: 'validate', title: mode === 'easy' ? 'Check workflow' : 'Validate workflow', icon: <Check size={14} />, run: () => void checkGraph('validate') },
         ...(mode === 'pro' ? [
           { id: 'preflight', title: 'Preflight executor', subtitle: executor, icon: <CloudCog size={14} />, run: () => void checkGraph('preflight') },
           { id: 'program', title: 'Open program editor', icon: <Frame size={14} />, run: () => setView('program') },
-          { id: 'prepare', title: 'Open preparation workspace', icon: <CloudCog size={14} />, run: () => setView('prepare') },
-          { id: 'json', title: 'Open graph JSON', icon: <FileJson2 size={14} />, run: () => setView('json') },
+          { id: 'prepare', title: 'Open Prepare', icon: <CloudCog size={14} />, run: () => setView('prepare') },
+          { id: 'json', title: 'Open workflow JSON', icon: <FileJson2 size={14} />, run: () => setView('json') },
         ] : []),
         { id: 'save', title: 'Save workflow', hint: '⌘S', icon: <Save size={14} />, run: () => void saveProject() },
         { id: 'open', title: 'Open workflow', icon: <FolderOpen size={14} />, run: () => void openProjects() },
-        { id: 'import-project', title: 'Import project package', icon: <Upload size={14} />, run: () => projectFile.current?.click() },
-        { id: 'export-project', title: 'Export project package', icon: <Download size={14} />, run: () => void exportProject() },
+        { id: 'import-project', title: 'Import project file', icon: <Upload size={14} />, run: () => projectFile.current?.click() },
+        { id: 'export-project', title: 'Export project file', icon: <Download size={14} />, run: () => void exportProject() },
         { id: 'new', title: 'New workflow', icon: <Plus size={14} />, run: newWorkflow },
         { id: 'undo', title: 'Undo', hint: '⌘Z', icon: <Undo2 size={14} />, run: undo },
         { id: 'redo', title: 'Redo', hint: '⇧⌘Z', icon: <Redo2 size={14} />, run: redo },
         {
           id: 'mode',
           title: mode === 'easy' ? 'Switch to Pro mode' : 'Switch to Easy mode',
-          subtitle: mode === 'easy' ? 'Program, Prepare, JSON, and every parameter' : 'Templates and essential controls',
+          subtitle: mode === 'easy' ? 'All settings, plus Program, Prepare, and JSON views' : 'Templates and essential controls',
           icon: mode === 'easy' ? <SlidersHorizontal size={14} /> : <Sparkles size={14} />,
           run: () => switchMode(mode === 'easy' ? 'pro' : 'easy'),
         },
@@ -1442,14 +1442,14 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       <header className="topbar">
         <div className="brand-block">
           <span className="brand-mark"><img src="/brand/mark.svg" alt="" /></span>
-          <span className="brand-copy"><strong>Mere Graph Studio</strong><small>{projectPath ?? graph.name}{dirty ? ' •' : ''}</small></span>
+          <span className="brand-copy"><strong>Graph Studio<span className="brand-period">.</span></strong><small>by mere.run</small></span>
         </div>
         <div className="command-bar" role="toolbar" aria-label="Workflow commands">
           <button className="icon-button" onClick={newWorkflow} title="New workflow" aria-label="New workflow"><Plus size={15} /></button>
           <button className="icon-button" onClick={() => void openProjects()} title="Open workflow" aria-label="Open workflow"><FolderOpen size={15} /></button>
           <button className={`icon-button ${dirty ? 'attention' : ''}`} onClick={() => void saveProject()} title="Save workflow (⌘S)" aria-label="Save workflow"><Save size={15} /></button>
-          <button className="icon-button project-transfer" onClick={() => projectFile.current?.click()} title="Import project package" aria-label="Import project"><Upload size={15} /></button>
-          <button className="icon-button project-transfer" onClick={() => void exportProject()} title="Export project package" aria-label="Export project"><Download size={15} /></button>
+          <button className="icon-button project-transfer" onClick={() => projectFile.current?.click()} title="Import project file" aria-label="Import project"><Upload size={15} /></button>
+          <button className="icon-button project-transfer" onClick={() => void exportProject()} title="Export project file" aria-label="Export project"><Download size={15} /></button>
           <span className="toolbar-divider" />
           <button className="icon-button" disabled={!canUndo} onClick={undo} title="Undo (⌘Z)" aria-label="Undo"><Undo2 size={15} /></button>
           <button className="icon-button" disabled={!canRedo} onClick={redo} title="Redo (⇧⌘Z)" aria-label="Redo"><Redo2 size={15} /></button>
@@ -1490,10 +1490,20 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
       {(() => (
       <main className="workspace">
+        <div className="workspace-heading">
+          <div className="workspace-identity">
+            <span className="workspace-eyebrow">Workspace <span aria-hidden="true">/</span> Workflow</span>
+            <h1 title={projectPath ?? graph.name}>{graph.name}</h1>
+          </div>
+          <button className={`save-state ${dirty ? 'unsaved' : ''}`} onClick={() => void saveProject()} title="Save workflow (⌘S)">
+            {dirty ? <span className="save-dot" /> : <Check size={12} />}
+            {dirty ? 'Unsaved changes' : 'No changes'}
+          </button>
+        </div>
         {(() => (
         <div className="viewbar">
           <div className="segmented" role="tablist">
-            <button role="tab" aria-selected={view === 'app'} title="Run as App" className={viewTabClass(view, 'app', 'app-tab')} onClick={() => setView('app')}><AppWindow size={14} /> App</button>
+            <button role="tab" aria-selected={view === 'app'} title="Run as app" className={viewTabClass(view, 'app', 'app-tab')} onClick={() => setView('app')}><AppWindow size={14} /> App</button>
             <button role="tab" aria-selected={view === 'canvas'} title="Canvas (1)" className={viewTabClass(view, 'canvas')} onClick={() => setView('canvas')}><Workflow size={14} /> Canvas</button>
             {mode === 'pro' ? (
               <button role="tab" aria-selected={view === 'program'} title="Program (2)" className={viewTabClass(view, 'program')} onClick={() => setView('program')}><Frame size={14} /> Program</button>
@@ -1539,6 +1549,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           />
         ) : view === 'canvas' ? ((() => (
           <div className="canvas-view">
+            <div className="canvas-context">
+              <span><Workflow size={13} /> {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'} <i /> {edgeCount} {edgeCount === 1 ? 'connection' : 'connections'}</span>
+              <button className="canvas-add" onClick={() => openPalette('nodes')}><Plus size={14} /> Add node</button>
+            </div>
             {mode === 'pro' ? (
               <div className="canvas-toolstrip" role="toolbar" aria-label="Canvas layout">
                 <button className="icon-button small" disabled={!graph.nodes.length} onClick={() => selectNodes(graph.nodes.map((node) => node.id))} title="Select all nodes" aria-label="Select all nodes"><ListChecks size={14} /></button>
@@ -1585,7 +1599,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               onDropFiles={(paths, position) => void importDroppedFiles(paths, position)}
               onUnsupportedFileDrop={() => {
                 if (!isNativeDesktop()) {
-                  pushToast('info', 'Use the desktop app to drop files', 'Hosted asset upload is not enabled yet.');
+                  pushToast('info', 'Use the desktop app to drop files', 'To add files, use the desktop app.');
                 }
               }}
               onQuickAdd={(position) => openPalette('nodes', position)}
@@ -1594,8 +1608,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               <div className="canvas-hero">
                 <div className="canvas-start">
                   <span className="hero-badge"><Sparkles size={19} /></span>
-                  <h2>{mode === 'easy' ? 'Start with a template or a node' : 'Empty graph'}</h2>
-                  {isNativeDesktop() ? <p>Drop images, video, audio, or files anywhere to create input cards.</p> : null}
+                  <h2>{mode === 'easy' ? 'Create a workflow' : 'Build your workflow'}</h2>
+                  <p>To build a workflow, add nodes and connect their inputs and outputs.{isNativeDesktop() ? ' In the desktop app, you can also drop files onto the canvas.' : ''}</p>
                   <div className="hero-actions">
                     <button className="command-button primary" onClick={() => openPalette('nodes')}><Plus size={14} /> Add node</button>
                     <button className="command-button" onClick={() => openPalette()}><Command size={13} /> Commands</button>
@@ -1685,7 +1699,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
       <CommandPalette
         open={paletteOpen}
-        placeholder={paletteScope === 'nodes' ? 'Add a node…' : 'Search actions, nodes, and templates…'}
+        placeholder={paletteScope === 'nodes' ? 'Search nodes' : 'Search actions, nodes, and templates'}
         groups={paletteGroups}
         onClose={closePalette}
       />
@@ -1714,7 +1728,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
                 <Workflow size={15} /><span><strong>{project.name}</strong><small>{project.path}</small></span><time>{new Date(project.modified_at).toLocaleDateString()}</time>
               </button>
             ))}
-            {!projects.length ? <div className="empty-state">No projects</div> : null}
+            {!projects.length ? <div className="empty-state">No saved projects</div> : null}
           </div>
         </div>
       </dialog>
@@ -1723,7 +1737,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
         className="visually-hidden"
         ref={projectFile}
         type="file"
-        aria-label="Import project package"
+        aria-label="Import project file"
         accept="application/json,.meregraph.json,.json"
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -1735,7 +1749,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
         className="visually-hidden"
         ref={comfyFile}
         type="file"
-        aria-label="Import Comfy workflow"
+        aria-label="Import ComfyUI workflow"
         accept="application/json,.json"
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -1766,7 +1780,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       </dialog>
       <dialog ref={comfyDialog}>
         <div className="dialog-body wide">
-          <div className="dialog-heading"><strong>Import Comfy workflow</strong><button className="icon-button small" onClick={() => comfyDialog.current?.close()} title="Close import dialog" aria-label="Close import dialog"><X size={15} /></button></div>
+          <div className="dialog-heading"><strong>Import ComfyUI workflow</strong><button className="icon-button small" onClick={() => comfyDialog.current?.close()} title="Close import dialog" aria-label="Close import dialog"><X size={15} /></button></div>
           <label className="field"><span>Managed model ID</span><input value={comfyModel} onChange={(event) => setComfyModel(event.target.value)} /></label>
           <pre className="import-report">{JSON.stringify(comfyReport, null, 2)}</pre>
           <div className="dialog-actions"><button className="command-button" onClick={() => comfyDialog.current?.close()}>Cancel</button><button className="command-button primary" onClick={() => void importComfy()}>Import</button></div>
@@ -1817,7 +1831,7 @@ function NativeApp() {
   };
 
   if (!status) {
-    return <main className="desktop-setup"><div className="setup-loading"><span /><strong>{error ?? 'Starting Mere Graph Studio…'}</strong></div></main>;
+    return <main className="desktop-setup"><div className="setup-loading"><span /><strong>{error ?? 'Starting Graph Studio'}</strong></div></main>;
   }
   if (settings || !status.onboarding_complete || !status.mere_run.available) {
     return <DesktopSetup
@@ -1845,9 +1859,9 @@ function CloudApp() {
   }, [inStudio]);
 
   if (!inStudio) return <CloudLanding />;
-  if (session === 'loading') return <main className="cloud-gate"><span /><strong>Connecting to your Mere fleet…</strong></main>;
+  if (session === 'loading') return <main className="cloud-gate"><span /><strong>Checking your sign-in session</strong></main>;
   if (session === 'guest') {
-    return <main className="cloud-gate"><div><Workflow size={24} /><h1>Graph Studio</h1><p>Sign in with Mere World to open your private projects and paired compute fleet.</p><a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Sign in <ArrowRight size={17} /></a></div></main>;
+    return <main className="cloud-gate"><div><Workflow size={24} /><h1>Graph Studio</h1><p>Sign in with Mere World to open your projects and run workflows on connected machines.</p><a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Sign in <ArrowRight size={17} /></a></div></main>;
   }
   return <ReactFlowProvider><Workspace runtime={runtime} onSignOut={() => window.location.assign('/auth/logout')} /></ReactFlowProvider>;
 }
@@ -1857,8 +1871,8 @@ function DesktopDevelopmentGate() {
     <main className="cloud-gate">
       <div>
         <Workflow size={24} />
-        <h1>Native Graph Studio</h1>
-        <p>Start this local build through <code>pnpm desktop:dev</code>. Local Studio uses Tauri IPC and never requires a Mere World sign-in.</p>
+        <h1>Desktop Graph Studio</h1>
+        <p>To open this development build, run <code>pnpm desktop:dev</code>. The desktop app runs local workflows without a Mere World account.</p>
       </div>
     </main>
   );

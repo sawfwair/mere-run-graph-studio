@@ -1,6 +1,8 @@
 import { createRoot } from 'react-dom/client';
 import { ReactFlowProvider } from '@xyflow/react';
 
+import { CloudLanding } from '../src/components/CloudLanding';
+import { NODE_FIXTURE } from './node-fixture';
 import { Workspace } from '../src/App';
 import { createMockRuntime, HARNESS_PROJECT } from './mock-runtime';
 import '../src/styles.css';
@@ -21,11 +23,11 @@ set('mere-studio-right-collapsed', params.get('right') === '1' ? '1' : '0');
 if (params.get('empty') === '1') {
   try { window.localStorage.removeItem('mere.graph-studio.recovery.v1'); } catch { /* ignore */ }
 } else {
-  set('mere.graph-studio.recovery.v1', JSON.stringify(HARNESS_PROJECT));
+  set('mere.graph-studio.recovery.v1', JSON.stringify(params.has('example') ? NODE_FIXTURE : HARNESS_PROJECT));
 }
 
 createRoot(document.getElementById('root')!).render(
   <ReactFlowProvider>
-    <Workspace runtime={createMockRuntime()} />
+    {params.has('landing') ? <CloudLanding /> : <Workspace runtime={createMockRuntime(params.has('example'))} />}
   </ReactFlowProvider>,
 );
