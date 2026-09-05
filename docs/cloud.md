@@ -49,9 +49,9 @@ to request cancellation or **Run details** to inspect events and diagnostics.
 If updates disconnect, use **Reconnect** to check the run again.
 
 Outputs appear as the executor publishes previews, artifacts, or node results.
-Completed upstream outputs remain available if a later node fails. Availability
-depends on the executor: workers that upload artifacts after the whole run
-finishes cannot provide early media. Studio retries unavailable artifacts and
+Completed upstream outputs remain available if a later node fails. Relay Node 0.2.22 publishes completed node outputs during execution. Providers
+that emit intermediate media can also publish previews, limited to one update
+per second. Earlier Node versions upload artifacts after the whole run finishes. Studio retries unavailable artifacts and
 provides **Retry preview** for a manual retry.
 
 Use **Pin output** on a completed node to keep its result for comparison with

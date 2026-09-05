@@ -9,7 +9,6 @@ export function liveRuntime(base: StudioRuntime, fail = false, faults = false): 
   let sequence = 0;
   let disconnect = faults;
   let rejectCancel = faults;
-  const image = { name: 'image', path: 'image', content_type: 'image/svg+xml', kind: 'image' };
   const advance = (id: string, stage: number) => {
     const prior = runs.get(id);
     if (!prior || prior.state === 'cancelled') return prior;
@@ -19,7 +18,7 @@ export function liveRuntime(base: StudioRuntime, fail = false, faults = false): 
     const clip = videoNode(stage, fail, prior.created_at, now);
     const next: StudioRun = { ...prior, state: finalState(stage, fail), updated_at: now,
       manifest: { ...manifest, nodes: [render, clip] },
-      artifacts: stage >= 2 ? [image] : [],
+      artifacts: [publishedImage(stage)],
       events: liveEvents(stage, prior.created_at, now),
     };
     runs.set(id, next); return next;
@@ -62,7 +61,7 @@ function finalState(stage: number, fail: boolean): string {
 }
 function imageNode(stage: number, started: string, now: string): JsonObject {
   return { id: 'render', state: stage >= 2 ? 'finished' : 'running', started_at: started, completed_at: stage >= 2 ? now : null,
-    outputs: stage >= 2 ? [{ name: 'image', path: 'image', content_type: 'image/svg+xml', kind: 'image' }] : [], models: [{ id: 'image-example' }] };
+    artifacts: [publishedImage(stage)], outputs: [], models: [{ id: 'image-example' }] };
 }
 function videoNode(stage: number, fail: boolean, started: string, now: string): JsonObject {
   const state = stage >= 2 ? finalState(stage, fail) : 'planned';
@@ -75,4 +74,10 @@ function liveEvents(stage: number, started: string, now: string): StudioRun['eve
   if (stage === 2) return [{ sequence: 3, type: 'node_started', node_id: 'clip', state: 'running', created_at: now },
     { sequence: 4, type: 'node_progress', node_id: 'clip', state: 'running', progress: { phase: 'encoding' }, created_at: now }];
   return [];
+}
+
+function publishedImage(stage: number) {
+  const digest = (stage >= 2 ? 'a' : 'b').repeat(64);
+  return { name: `_live-render-${digest}`, path: `.relay-publications/${digest}`,
+    sha256: digest, content_type: 'image/svg+xml', kind: stage >= 2 ? 'graph.node-output' : 'graph.preview' };
 }

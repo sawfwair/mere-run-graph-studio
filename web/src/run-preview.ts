@@ -38,7 +38,7 @@ function artifactItem(raw: JsonObject, fallbackName?: string): NodeRunPreviewIte
   if (!path) return null;
   const name = optionalString(raw.name) ?? fallbackName ?? path;
   return {
-    outputName: name,
+    outputName: raw.kind === 'graph.preview' ? 'Preview' : raw.kind === 'graph.node-output' ? 'Output' : name,
     artifact: {
       name,
       kind: optionalString(raw.kind) ?? 'file',
@@ -86,7 +86,8 @@ function manifestPreviews(run: StudioRun): Record<string, NodeRunPreview> {
     const id = optionalString(node.id);
     if (!id) continue;
     const items = previewItems(node);
-    if (items.length) previews[id] = { runId: run.id, state: optionalString(node.state) ?? 'running', items };
+    if (items.length) previews[id] = { runId: run.id, state: optionalString(node.state) ?? 'running', items,
+      intermediate: items.some((item) => item.artifact?.kind === 'graph.preview') || undefined };
   }
   return previews;
 }

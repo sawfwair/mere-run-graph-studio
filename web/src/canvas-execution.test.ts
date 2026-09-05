@@ -43,6 +43,13 @@ describe('canvas execution', () => {
     const hosted = { ...base, remote_reference: 'job', manifest: { nodes: [completed] }, artifacts: [{ name: 'registered-image', kind: 'image', path: 'registered-image', sha256: 'abc' }] };
     expect(nodePreviews(hosted).image.items[0].artifact?.path).toBe('registered-image');
   });
+  it('labels published intermediate media and prefers immutable hosted aliases', () => {
+    const artifact = { name: '_live-image-abc', path: '.relay-publications/abc', kind: 'graph.preview', content_type: 'image/png', sha256: 'abc' };
+    const preview = nodePreviews({ ...base, remote_reference: 'job', manifest: { nodes: [{ id: 'image', state: 'running', artifacts: [artifact] }] }, artifacts: [artifact] }).image;
+    expect(preview.intermediate).toBe(true);
+    expect(preview.items[0].outputName).toBe('Preview');
+    expect(preview.items[0].artifact?.name).toBe('_live-image-abc');
+  });
   it('captures submitted settings without copying secret references or later edits', async () => {
     const graph: WorkflowGraph = { schema_version: 1, kind: 'mere.run/workflow-graph', name: 'Test', inputs: { prompt: { type: 'string' } }, nodes: [{ id: 'image', kind: 'image.generate', arguments: { prompt: { $ref: 'inputs.prompt' }, model: 'image-test', seed: 7 } }, { id: 'secret', kind: 'text.generate', arguments: { prompt: { $secret: 'private-prompt' } } }], outputs: {} };
     const source = await captureRunSource(graph, { prompt: 'A lighthouse' });

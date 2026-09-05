@@ -183,6 +183,9 @@ async function verifyLiveCanvas() {
   const clip = page.locator('.react-flow__node-workflow[data-id="clip"]');
   await render.getByRole('progressbar', { name: 'Reported inference progress' }).waitFor();
   if (await page.getByRole('tab', { name: 'Canvas', exact: true }).getAttribute('aria-selected') !== 'true') throw Error('Starting a workflow must stay on the canvas');
+  await render.locator('.canvas-run-preview img').waitFor();
+  await render.getByText('Intermediate preview', { exact: true }).waitFor();
+  if (await render.getByRole('button', { name: 'Pin output', exact: true }).count()) throw Error('Intermediate previews must not be pinnable final outputs');
   await page.screenshot({ path: resolve(outDir, 'live-running.png') });
   await render.locator('.canvas-run-preview img').waitFor();
   await clip.locator('.node-execution-phase').filter({ hasText: 'encoding' }).waitFor();
