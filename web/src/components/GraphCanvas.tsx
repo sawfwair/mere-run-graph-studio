@@ -783,7 +783,6 @@ export function GraphCanvas({
       }}
       onDrop={dropNode}
       colorMode="dark"
-      proOptions={{ hideAttribution: true }}
     >
       <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="var(--canvas-dot)" />
       <Controls position="bottom-left" orientation="horizontal" showInteractive={false} />

@@ -241,7 +241,6 @@ function ShowcaseCanvas() {
           panOnScroll={false}
           preventScrolling={false}
           deleteKeyCode={null}
-          proOptions={{ hideAttribution: true }}
           colorMode="dark"
         >
           <Background variant={BackgroundVariant.Dots} gap={22} size={1.4} color="var(--canvas-dot)" />
