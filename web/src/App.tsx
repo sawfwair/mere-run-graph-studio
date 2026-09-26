@@ -42,6 +42,7 @@ import { CloudLanding } from './components/CloudLanding';
 import { CommandPalette, type PaletteGroup } from './components/CommandPalette';
 import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
 import { DesktopSetup } from './components/DesktopSetup';
+import { DesktopTools } from './components/DesktopTools';
 import { GraphCanvas, type CanvasPosition } from './components/GraphCanvas';
 import { HelpOverlay } from './components/HelpOverlay';
 import { Inspector } from './components/Inspector';
@@ -1874,7 +1875,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
         </form>
       </dialog>
 
-      <dialog ref={openDialog}>
+      <dialog ref={openDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>Open workflow</strong><button className="icon-button small" onClick={() => openDialog.current?.close()} title="Close open dialog" aria-label="Close open dialog"><X size={15} /></button></div>
           <div className="project-list">
@@ -1912,7 +1913,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           event.target.value = '';
         }}
       />
-      <dialog ref={templateDialog}>
+      <dialog ref={templateDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>{templateDraft?.graph.name ?? 'Workflow template'}</strong><button className="icon-button small" onClick={() => templateDialog.current?.close()} title="Close template dialog" aria-label="Close template dialog"><X size={15} /></button></div>
           {templateDraft ? <TemplateForm
@@ -1923,7 +1924,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           <div className="dialog-actions"><button className="command-button" onClick={() => templateDialog.current?.close()}>Cancel</button><button className="command-button primary" onClick={applyTemplate}>Create workflow</button></div>
         </div>
       </dialog>
-      <dialog ref={publishDialog}>
+      <dialog ref={publishDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>Publish workflow template</strong><button className="icon-button small" onClick={() => publishDialog.current?.close()} title="Close publish dialog" aria-label="Close publish dialog"><X size={15} /></button></div>
           <label className="field"><span>Template ID</span><input value={publishDraft.template_id} onChange={(event) => setPublishDraft({ ...publishDraft, template_id: event.target.value })} /></label>
@@ -1933,7 +1934,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           <div className="dialog-actions"><button className="command-button" onClick={() => publishDialog.current?.close()}>Cancel</button><button className="command-button primary" onClick={() => void publishTemplate()}>Publish</button></div>
         </div>
       </dialog>
-      <dialog ref={comfyDialog}>
+      <dialog ref={comfyDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>Import ComfyUI workflow</strong><button className="icon-button small" onClick={() => comfyDialog.current?.close()} title="Close import dialog" aria-label="Close import dialog"><X size={15} /></button></div>
           <label className="field"><span>Managed model ID</span><input value={comfyModel} onChange={(event) => setComfyModel(event.target.value)} /></label>
@@ -1991,6 +1992,7 @@ function NativeApp() {
   if (settings || !status.onboarding_complete || !status.mere_run.available) {
     return <DesktopSetup
       status={status}
+      tools={<DesktopTools runtime={runtime} status={status} onStatus={setStatus} />}
       settings={settings || status.onboarding_complete}
       saving={saving}
       error={error}

@@ -2074,8 +2074,9 @@ dialog {
 }
 dialog[open] { animation: rise-in 160ms ease; }
 dialog::backdrop { background: rgba(5, 6, 9, 0.66); }
+dialog.wide-dialog, dialog.app-sharing-dialog { width: min(660px, calc(100vw - 32px)); }
 .dialog-body { padding: 16px; }
-.dialog-body.wide { width: min(660px, calc(100vw - 32px)); }
+.dialog-body.wide { width: 100%; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .dialog-heading strong { font-size: 13.5px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 16px; }
@@ -3027,8 +3028,6 @@ dialog::backdrop { background: rgba(5, 6, 9, 0.66); }
 .saved-preset > button:first-child { flex: 1; min-width: 0; }
 .saved-preset > .icon-button { flex: 0 0 auto; align-self: center; }
 .app-version-list { display: grid; gap: 8px; margin-top: 18px; max-height: 280px; overflow: auto; }
-.app-sharing-dialog { width: min(660px, calc(100vw - 32px)); }
-.app-sharing-dialog .dialog-body.wide { width: 100%; }
 .app-sharing-dialog p { font-size: 13px; line-height: 1.5; color: var(--muted); }
 .app-version { display: flex; align-items: center; gap: 8px; padding: 9px; border: 1px solid #354550; border-radius: 8px; }
 .app-version > div { flex: 1; min-width: 0; }
@@ -3041,4 +3040,27 @@ dialog::backdrop { background: rgba(5, 6, 9, 0.66); }
   .board-view { padding: 16px; }
   .board-heading { display: block; }
   .board-grid.comparing { grid-template-columns: 1fr; }
+}
+
+/* Desktop setup and provider-declared network requirements. */
+.desktop-tools { padding: 20px; border-top: 1px solid var(--line); }
+.desktop-tools h2 { font-size: 18px; margin: 0; }
+.desktop-tools p { color: var(--muted); font-size: 13px; line-height: 1.6; }
+.setup-tool-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.setup-plugins { display: grid; gap: 8px; margin-top: 12px; max-height: 300px; overflow: auto; }
+.setup-plugins > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+.setup-plugins span, .setup-verification span { display: grid; gap: 5px; min-width: 0; }
+.setup-plugins small, .setup-verification small { color: var(--muted); }
+.setup-install-plan { padding: 14px; margin-top: 14px; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 10px; }
+.setup-install-plan pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
+.setup-verification { display: flex; align-items: flex-start; gap: 10px; padding: 14px; margin-top: 14px; color: var(--accent); border: 1px solid var(--accent-line); border-radius: 10px; }
+.setup-verification code { overflow-wrap: anywhere; color: var(--muted); font-size: 11px; }
+.network-badge { display: inline-block; width: fit-content; color: var(--muted); font-size: 10px; line-height: 1.6; font-style: normal; }
+.network-badge.required { color: var(--amber); }
+.network-badge.local { color: var(--accent); }
+.node-network { padding: 0 14px 6px; }
+@media (max-width: 600px) {
+  .desktop-tools { padding: 16px; }
+  .desktop-tools .section-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .setup-plugins > div { align-items: flex-start; flex-direction: column; }
 }

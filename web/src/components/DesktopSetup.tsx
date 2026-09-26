@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { CheckCircle2, FolderOpen, HardDrive, Network, TerminalSquare, X } from 'lucide-react';
 
@@ -11,6 +11,7 @@ interface DesktopSetupProps {
   error: string | null;
   onSave: (configuration: DesktopConfiguration) => void;
   onCancel?: () => void;
+  tools?: ReactNode;
 }
 
 function SetupHeading({ status, settings, onCancel }: Pick<DesktopSetupProps, 'status' | 'settings' | 'onCancel'>) {
@@ -71,7 +72,7 @@ function SetupFooter({ saving, settings, workspace, mereRun, onSubmit }: {
   );
 }
 
-export function DesktopSetup({ status, settings = false, saving, error, onSave, onCancel }: DesktopSetupProps): ReactElement {
+export function DesktopSetup({ status, settings = false, saving, error, onSave, onCancel, tools }: DesktopSetupProps): ReactElement {
   const [workspace, setWorkspace] = useState(status.workspace);
   const [mereRun, setMereRun] = useState(status.mere_run.path ?? '');
   const [workflowTools, setWorkflowTools] = useState(status.workflow_tools.path ?? '');
@@ -114,6 +115,7 @@ export function DesktopSetup({ status, settings = false, saving, error, onSave, 
         </div>
 
         {error ? <div className="setup-error" role="alert">{error}</div> : null}
+        {tools}
 
         <SetupFooter saving={saving} settings={settings} workspace={workspace} mereRun={mereRun} onSubmit={submit} />
       </section>

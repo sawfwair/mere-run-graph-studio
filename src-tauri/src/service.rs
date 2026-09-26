@@ -35,6 +35,7 @@ pub struct StudioService {
 
 include!("service_projects.rs");
 include!("service_support.rs");
+include!("service_setup.rs");
 
 include!("service_tools.rs");
 
@@ -44,6 +45,56 @@ include!("service_run_support.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_version_parsing_rejects_unknown_and_orders_numeric_components() {
+        assert_eq!(
+            parse_runtime_version("mere.run 0.50.0"),
+            Some(vec![0, 50, 0])
+        );
+        assert_eq!(parse_runtime_version("0.24.0"), Some(vec![0, 24, 0]));
+        assert!(parse_runtime_version("unversioned").is_none());
+        assert!(parse_runtime_version("mere.run 0.50.0") > parse_runtime_version("0.24.0"));
+    }
+
+    #[test]
+    fn studio_run_records_leave_cli_run_destinations_empty() {
+        let root = tempfile::tempdir().expect("temporary app data");
+        let app_data = root.path().join("app-data");
+        let service = StudioService::new(app_data.clone()).expect("service");
+        let run_directory = service.workspace().join("runs/local-verification-123");
+        let run = StudioRun {
+            id: "123".to_owned(),
+            executor: "local".to_owned(),
+            run_directory: run_directory.clone(),
+            graph_path: root.path().join("workflow.json"),
+            inputs_path: root.path().join("inputs.json"),
+            state: "starting".to_owned(),
+            created_at: now(),
+            updated_at: now(),
+            exit_code: None,
+            result: Value::Null,
+            stderr: String::new(),
+            remote_reference: None,
+            history: Vec::new(),
+        };
+        service.persist_run(&run).expect("persist Studio record");
+        assert!(!run_directory.exists());
+        assert!(
+            service
+                .workspace()
+                .join(".mere-graph-studio/run-records/123.json")
+                .is_file()
+        );
+        let restored = StudioService::new(app_data).expect("restore service");
+        assert_eq!(
+            restored
+                .required_run("123")
+                .expect("restored run")
+                .run_directory,
+            run_directory
+        );
+    }
 
     fn fixture_graph() -> Value {
         json!({

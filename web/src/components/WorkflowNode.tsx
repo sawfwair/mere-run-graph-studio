@@ -16,6 +16,7 @@ import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { NodeExecutionState } from '../canvas-execution';
 import { NodeExecution } from './CanvasRunBar';
 import { NodeOutputPanel } from './NodeOutputPanel';
+import { NetworkBadge } from './NetworkBadge';
 import type {
   CatalogEntry,
   CatalogField,
@@ -235,7 +236,9 @@ function visibleInputs(entry: CatalogEntry | undefined, value: WorkflowNodeValue
   const names = new Set(splitFieldsForMode(allInputs, mode).primary.map((field) => field.name));
   for (const field of allInputs) {
     const nested = nestedPorts(field, value.arguments[field.name]);
-    if (isGraphReference(value.arguments[field.name]) || nested.some((port) => isGraphReference(port.value))) {
+    if (portTypeKey(field.type) === 'asset'
+      || isGraphReference(value.arguments[field.name])
+      || nested.some((port) => isGraphReference(port.value))) {
       names.add(field.name);
     }
   }
@@ -427,6 +430,7 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
         <span className="node-ordinal" title={`Node ${ordinal}`}><span>Node</span>{String(ordinal).padStart(2, '0')}</span>
       </header>
       <NodeExecution execution={data.execution} />
+      <div className="node-network"><NetworkBadge entry={entry} /></div>
       <NodePrompt data={data} />
       <NodeModelSelector data={data} entry={entry} value={value} />
       {entry?.presentation?.style === 'material' ? (

@@ -288,14 +288,100 @@ async function verifyAppSharing() {
   console.log('✓ app version publication, desktop/mobile sharing, and revocation');
 }
 
+async function verifyTemplateDialog() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?template=1`, { waitUntil: 'networkidle' });
+  await page.locator('.template-list > button').first().click();
+  const dialog = page.locator('dialog.wide-dialog[open]');
+  await dialog.getByRole('button', { name: 'Create workflow' }).waitFor();
+  for (const width of [1600, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(250); // capture after the dialog entrance finishes
+    const layout = await dialog.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const field = element.querySelector('.template-form input')?.getBoundingClientRect();
+      return { overflow: element.scrollWidth > element.clientWidth + 1,
+        left: bounds.left, right: bounds.right, fieldLeft: field?.left, fieldRight: field?.right };
+    });
+    if (layout.overflow || layout.left < 0 || layout.right > width ||
+      layout.fieldLeft === undefined || layout.fieldLeft < layout.left ||
+      layout.fieldRight === undefined || layout.fieldRight > layout.right) {
+      throw Error(`Template dialog clips its fields at ${width}px: ${JSON.stringify(layout)}`);
+    }
+    await page.screenshot({ path: resolve(outDir, `template-dialog-${width}.png`) });
+  }
+  console.log('✓ template dialog fields fit at desktop and mobile widths');
+}
+
+async function verifyVideoImageConnection() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?video-unwired=1`, { waitUntil: 'networkidle' });
+  const source = page.locator('.react-flow__node-workflow[data-id="render"] .react-flow__handle[data-handleid="image"]');
+  const target = page.locator('.react-flow__node-workflow[data-id="clip"] .react-flow__handle[data-handleid="image"]');
+  const endImage = page.locator('.react-flow__node-workflow[data-id="clip"] .react-flow__handle[data-handleid="end_image"]');
+  await source.waitFor();
+  await target.waitFor();
+  await endImage.waitFor();
+  if (await page.locator('.react-flow__edge').count()) throw Error('Video image should start disconnected');
+  const from = await source.boundingBox();
+  const to = await target.boundingBox();
+  if (!from || !to) throw Error('Image connection handles are not visible');
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 1);
+  await page.locator('.react-flow__node-workflow[data-id="clip"] .port-row.wired').filter({ hasText: 'Image' }).waitFor();
+  await page.screenshot({ path: resolve(outDir, 'video-image-connected.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/?video-connected=1`, { waitUntil: 'networkidle' });
+  await page.locator('.react-flow__node-workflow[data-id="clip"] .port-row.wired').filter({ hasText: 'Image' }).waitFor();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) {
+    throw Error('Connected video image overflows the mobile viewport');
+  }
+  const canvas = await page.locator('.graph-canvas-shell').boundingBox();
+  const nodes = await page.locator('.react-flow__node-workflow').evaluateAll((elements) => elements.map((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  }));
+  if (!canvas || nodes.some((node) => node.x < canvas.x || node.x + node.width > canvas.x + canvas.width ||
+    node.y < canvas.y || node.y + node.height > canvas.y + canvas.height)) {
+    throw Error('Connected video workflow is not framed on mobile');
+  }
+  await page.screenshot({ path: resolve(outDir, 'video-image-connected-mobile.png') });
+  console.log('✓ optional video image and end image ports appear, image output connects, and mobile layout fits');
+}
+
 await verifyLiveCanvas();
 await verifyLiveRecovery();
 await verifyCreativeLoop();
 await verifyAppSharing();
+await verifyTemplateDialog();
+await verifyVideoImageConnection();
 await verifyNodePromptEditing();
 await verifyInspectorCanvasInteraction();
 await verifyLibraryAndOutline();
 await verifyMobileGraphFraming();
+
+for (const { name, query, width } of [
+  { name: 'desktop-setup', query: 'setup=1', width: 1600 },
+  { name: 'desktop-setup-mobile', query: 'setup=1', width: 390 },
+  { name: 'desktop-setup-missing', query: 'setup=missing', width: 1600 },
+  { name: 'desktop-setup-missing-mobile', query: 'setup=missing', width: 390 },
+]) {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto(`${base}/?${query}`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Find tools' }).waitFor();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+  if (overflow) throw Error(`${name} overflows horizontally`);
+  if (query === 'setup=1') {
+    await page.getByText('Optional plugins').click();
+    await page.getByRole('button', { name: 'Review installation' }).last().click();
+    await page.getByText('Install signed image compose bundle').waitFor();
+  }
+  await page.screenshot({ path: resolve(outDir, `${name}.png`), fullPage: true });
+  console.log(`✓ ${name}.png`);
+}
 
 for (const { name, query, viewport, view } of shots) {
   await page.setViewportSize(viewport);
@@ -335,4 +421,4 @@ if (browserErrors.length) throw new Error(`Browser errors:\n${browserErrors.join
 
 await browser.close();
 await server.close();
-console.log(`\nWrote ${shots.length + 7} shot(s) to ${outDir}`);
+console.log(`\nWrote ${shots.length + 15} shot(s) to ${outDir}`);

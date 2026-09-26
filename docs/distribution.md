@@ -23,6 +23,8 @@ Before tagging:
 pnpm desktop:build
 ```
 
+On macOS, run the [packaged local execution check](local-desktop.md#verify-a-packaged-app) against the `.app` executable before treating an installer as locally verified. The check denies network access, runs a model-free graph through the Rust host and public CLI, and verifies its artifact bytes.
+
 The first command covers repository and JSON contracts, Rust formatting,
 Clippy with warnings denied, Rust tests, TypeScript, frontend and Worker tests,
 both production builds, the Worker dry run, and release-tool tests. Pull requests also

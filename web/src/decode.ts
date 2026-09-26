@@ -248,6 +248,7 @@ function decodeCatalogRequirements(value: unknown, path: string): CatalogEntry['
   const requirements = recordValue(value, path);
   return {
     accelerator_backends: optionalStringArray(requirements.accelerator_backends, `${path}.accelerator_backends`),
+    network_access: requirements.network_access === undefined ? undefined : booleanValue(requirements.network_access, `${path}.network_access`),
     model_ids: optionalStringArray(requirements.model_ids, `${path}.model_ids`),
   };
 }

@@ -290,6 +290,26 @@ export class NativeRuntime implements StudioRuntime {
     return invokeDecoded('studio_configure', decodeDesktopStatus, { request });
   }
 
+  discoverTools(): Promise<DesktopStatus> {
+    return invokeDecoded('studio_discover_tools', decodeDesktopStatus);
+  }
+
+  openRuntimeDownloads(): Promise<JsonObject> {
+    return invokeDecoded('studio_open_runtime_downloads', decodeJsonObject);
+  }
+
+  plugins(): Promise<CommandDocument<JsonValue>> {
+    return invokeDecoded('studio_plugins', decodeJsonCommand);
+  }
+
+  setupPlugin(id: string, confirmed: boolean): Promise<CommandDocument<JsonValue>> {
+    return invokeDecoded('studio_setup_plugin', decodeJsonCommand, { request: { id, confirmed } });
+  }
+
+  verifyLocal(): Promise<JsonObject> {
+    return invokeDecoded('studio_verify_local', decodeJsonObject);
+  }
+
   catalog(): Promise<CommandDocument<{ nodes: CatalogEntry[] }>> {
     return invokeDecoded('studio_catalog', decodeCatalogCommand);
   }
