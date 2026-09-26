@@ -354,6 +354,14 @@ export function GraphCanvas({
   const { screenToFlowPosition } = useReactFlow();
   const shellRef = useRef<HTMLDivElement>(null);
   const [fileDropActive, setFileDropActive] = useState(false);
+  const compactOpening = mode === 'easy' && window.matchMedia('(max-width: 680px)').matches;
+  const firstNode = graph.nodes[0];
+  const openingPosition = firstNode
+    ? sidecar.nodes[firstNode.id] ?? { x: 80, y: 80 }
+    : Object.values(sidecar.inputs ?? {})[0] ?? { x: 32, y: 64 };
+  const openingViewport = compactOpening
+    ? { x: 28 - openingPosition.x * 0.82, y: 100 - openingPosition.y * 0.82, zoom: 0.82 }
+    : sidecar.viewport;
   const derivedNodes = useMemo<StudioFlowNode[]>(
     () => {
       const inputNodes: GraphInputFlowNode[] = Object.entries(graph.inputs).map(([name, definition], index) => ({
@@ -705,8 +713,8 @@ export function GraphCanvas({
       edges={edges}
       onNodesChange={onNodesChange}
       nodeTypes={nodeTypes}
-      defaultViewport={sidecar.viewport}
-      fitView={window.matchMedia('(max-width: 1080px)').matches}
+      defaultViewport={openingViewport}
+      fitView={!compactOpening && window.matchMedia('(max-width: 1080px)').matches}
       minZoom={0.25}
       maxZoom={1.8}
       fitViewOptions={{ padding: 0.2, maxZoom: 1.1 }}

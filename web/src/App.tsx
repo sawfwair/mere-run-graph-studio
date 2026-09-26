@@ -158,6 +158,26 @@ function readFlag(key: string): boolean {
 function writeFlag(key: string, value: boolean): void {
   try { window.localStorage.setItem(key, value ? '1' : '0'); } catch { /* private mode */ }
 }
+function loadCanvasFocus(): boolean {
+  try { return window.localStorage.getItem('mere-studio-canvas-focus') !== '0'; }
+  catch { return true; }
+}
+function workspaceShellClass(
+  mode: StudioMode, view: StudioView, leftCollapsed: boolean, rightCollapsed: boolean,
+  focusCanvas: boolean, selectedNodeCount: number, selectedInputName: string | null,
+  selectedOutputName: string | null, selectedEditorItemId: string | null,
+): string {
+  const hasSelection = Boolean(selectedNodeCount || selectedInputName || selectedOutputName || selectedEditorItemId);
+  return `app-shell mode-${mode}${leftCollapsed ? ' left-collapsed' : ''}${rightCollapsed ? ' right-collapsed' : ''}${view === 'canvas' && mode === 'easy' && focusCanvas ? ' canvas-focused' : ''}${hasSelection ? ' canvas-has-selection' : ''}`;
+}
+function CanvasFocusToggle({ mode, focusCanvas, onToggle }: {
+  mode: StudioMode; focusCanvas: boolean; onToggle: () => void;
+}) {
+  if (mode !== 'easy') return null;
+  return <button className="canvas-focus-toggle" aria-pressed={focusCanvas} onClick={onToggle}>
+    <Columns2 size={14} /> {focusCanvas ? 'Show panels' : 'Focus canvas'}
+  </button>;
+}
 
 function editableShortcutTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && target.matches('input, textarea, select, [contenteditable="true"]');
@@ -257,8 +277,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const [mode, setMode] = useState<StudioMode>(loadStoredMode);
   const [leftCollapsed, setLeftCollapsed] = useState(() => readFlag('mere-studio-left-collapsed'));
   const [rightCollapsed, setRightCollapsed] = useState(() => readFlag('mere-studio-right-collapsed'));
+  const [focusCanvas, setFocusCanvas] = useState(loadCanvasFocus);
   useEffect(() => writeFlag('mere-studio-left-collapsed', leftCollapsed), [leftCollapsed]);
   useEffect(() => writeFlag('mere-studio-right-collapsed', rightCollapsed), [rightCollapsed]);
+  useEffect(() => writeFlag('mere-studio-canvas-focus', focusCanvas), [focusCanvas]);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [executors, setExecutors] = useState(['local']);
   const [executor, setExecutor] = useState('local');
@@ -1551,7 +1573,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   );
 
   return (
-    <div className={`app-shell mode-${mode}${leftCollapsed ? ' left-collapsed' : ''}${rightCollapsed ? ' right-collapsed' : ''}`}>
+    <div className={workspaceShellClass(mode, view, leftCollapsed, rightCollapsed, focusCanvas,
+      selectedNodeIds.length, selectedInputName, selectedOutputName, selectedEditorItemId)}>
       {(() => (
       <header className="topbar">
         <div className="brand-block">
@@ -1673,7 +1696,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               onDetails={() => { if (canvas.run) setSelectedRun(canvas.run); setView('runs'); }} />
             <div className="canvas-context">
               <span><Workflow size={13} /> {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'} <i /> {edgeCount} {edgeCount === 1 ? 'connection' : 'connections'}</span>
-              <button className="canvas-add" onClick={() => openPalette('nodes')}><Plus size={14} /> Add node</button>
+              <div className="canvas-context-actions">
+                <CanvasFocusToggle mode={mode} focusCanvas={focusCanvas} onToggle={() => setFocusCanvas((current) => !current)} />
+                <button className="canvas-add" onClick={() => openPalette('nodes')}><Plus size={14} /> Add node</button>
+              </div>
             </div>
             {mode === 'pro' ? (
               <div className="canvas-toolstrip" role="toolbar" aria-label="Canvas layout">

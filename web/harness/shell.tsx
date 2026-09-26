@@ -25,6 +25,7 @@ const set = (key: string, value: string) => { try { window.localStorage.setItem(
 set('mere-studio-mode', params.get('mode') === 'pro' ? 'pro' : 'easy');
 set('mere-studio-left-collapsed', params.get('left') === '1' ? '1' : '0');
 set('mere-studio-right-collapsed', params.get('right') === '1' ? '1' : '0');
+set('mere-studio-canvas-focus', params.get('focus') === '0' ? '0' : '1');
 if (params.get('empty') === '1') {
   try { window.localStorage.removeItem('mere.graph-studio.recovery.v1'); } catch { /* ignore */ }
 } else {

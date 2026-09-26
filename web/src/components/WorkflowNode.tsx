@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { AlertTriangle, Box, Braces, Cpu, Download, Image, Layers, Link2, Lock, Music, ScanSearch, Sparkles, Type, Video, Zap } from 'lucide-react';
 
@@ -401,17 +401,66 @@ function NodeFooter({ entry, value, mode }: { entry: CatalogEntry | undefined; v
   </footer>;
 }
 
+function nodeClassName(category: string, mode: StudioMode, media: boolean, selected: boolean): string {
+  return `workflow-node cat-${category} ${mode === 'easy' ? 'creative-node' : ''} ${media ? 'creative-media-node' : ''} ${selected ? 'selected' : ''}`;
+}
+
+function showNodeExecution(mode: StudioMode, hasOutput: boolean, execution?: NodeExecutionState): boolean {
+  return mode === 'pro' || !hasOutput || (execution?.state !== 'finished' && execution?.state !== 'skipped');
+}
+
+function MediaStage({ creativeMedia, hasOutput, output, category }: {
+  creativeMedia: boolean; hasOutput: boolean; output: ReactNode; category: keyof typeof categoryIcons;
+}) {
+  if (!creativeMedia) return null;
+  if (hasOutput) return output;
+  const Icon = categoryIcons[category];
+  return <div className="creative-media-empty"><Icon size={25} strokeWidth={1.4} /><span>Output appears here after a run</span></div>;
+}
+
+function NodeSettings({ data, creativeMedia, hasOutput }: {
+  data: WorkflowNodeData; creativeMedia: boolean; hasOutput: boolean;
+}) {
+  const settings = <>
+    <NodePrompt data={data} />
+    <NodeModelSelector data={data} entry={data.entry} value={data.value} />
+  </>;
+  const editable = Boolean(inlinePromptField(data.entry, data.value) || modelFieldFor(data.entry));
+  return creativeMedia && hasOutput && editable
+    ? <details className="creative-node-settings nodrag nopan"><summary>Edit prompt &amp; model</summary>{settings}</details>
+    : settings;
+}
+
+function NodeBody({ data, category }: { data: WorkflowNodeData; category: keyof typeof categoryIcons }) {
+  const { entry, value, mode, preview, artifactBlob, onArgumentChange } = data;
+  const creativeMedia = mode === 'easy' && Boolean(entry?.outputs.some((field) => field.type.startsWith('asset')));
+  const hasOutput = Boolean(preview || data.pinnedPreview);
+  const output = <NodeOutputPanel preview={preview} pinned={data.pinnedPreview} artifactBlob={artifactBlob}
+    onPin={data.onPinPreview} onUnpin={data.onUnpinPreview} onSave={data.onSaveOutput} onUse={data.onUseOutput} />;
+  return <>
+    {showNodeExecution(mode, hasOutput, data.execution) ? <NodeExecution execution={data.execution} /> : null}
+    <div className="node-network"><NetworkBadge entry={entry} /></div>
+    <MediaStage creativeMedia={creativeMedia} hasOutput={hasOutput} output={output} category={category} />
+    <NodeSettings data={data} creativeMedia={creativeMedia} hasOutput={hasOutput} />
+    {entry?.presentation?.style === 'material' ? (
+      <div className="material-editor"><MaterialEditor entry={entry} value={value} onArgumentChange={onArgumentChange} /></div>
+    ) : null}
+    {!creativeMedia ? output : null}
+  </>;
+}
+
 function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
-  const { entry, value, ordinal, mode, onArgumentChange, preview, artifactBlob } = data;
+  const { entry, value, ordinal, mode } = data;
   const category = categoryKey(entry?.category);
   const Icon = categoryIcons[category];
   const allInputs = entry?.inputs ?? [];
   const inputs = visibleInputs(entry, value, mode);
   const hiddenInputCount = allInputs.length - inputs.length;
   const outputs = entry?.outputs ?? [];
+  const creativeMedia = mode === 'easy' && outputs.some((field) => field.type.startsWith('asset'));
 
   return (
-    <article className={`workflow-node cat-${category} ${selected ? 'selected' : ''}`}>
+    <article className={nodeClassName(category, mode, creativeMedia, selected)}>
       <span className="node-accent" aria-hidden />
       <Handle
         type="target"
@@ -429,16 +478,7 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
         </span>
         <span className="node-ordinal" title={`Node ${ordinal}`}><span>Node</span>{String(ordinal).padStart(2, '0')}</span>
       </header>
-      <NodeExecution execution={data.execution} />
-      <div className="node-network"><NetworkBadge entry={entry} /></div>
-      <NodePrompt data={data} />
-      <NodeModelSelector data={data} entry={entry} value={value} />
-      {entry?.presentation?.style === 'material' ? (
-        <div className="material-editor">
-          <MaterialEditor entry={entry} value={value} onArgumentChange={onArgumentChange} />
-        </div>
-      ) : null}
-      <NodeOutputPanel preview={preview} pinned={data.pinnedPreview} artifactBlob={artifactBlob} onPin={data.onPinPreview} onUnpin={data.onUnpinPreview} onSave={data.onSaveOutput} onUse={data.onUseOutput} />
+      <NodeBody data={data} category={category} />
       <NodePorts inputs={inputs} outputs={outputs} value={value} mode={mode} />
       {hiddenInputCount ? <div className="node-hidden-inputs">{hiddenInputsLabel(hiddenInputCount)}</div> : null}
       <NodeSummaries value={value} entry={entry} mode={mode} />
