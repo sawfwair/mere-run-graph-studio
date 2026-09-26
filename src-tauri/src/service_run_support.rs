@@ -35,6 +35,7 @@ fn lifecycle_record(kind: &str, message: &str, details: Value) -> Value {
 fn stored_run(run: &StudioRun) -> Value {
     json!({
         "id": run.id,
+        "run_directory": run.run_directory,
         "executor": run.executor,
         "graph_path": run.graph_path,
         "inputs_path": run.inputs_path,

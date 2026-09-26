@@ -36,6 +36,7 @@ pnpm harness:shoot hero=mode=pro  # custom "name=query" shots
 ```
 
 - Output goes to `web/harness/shots/` (gitignored). Override with `HARNESS_OUT`.
+- The matrix also captures configured and missing-runtime desktop setup at desktop and narrow widths. Plugin installation is previewed with a mock runtime; the package proof runs the real CLI separately.
 - The command checks inline prompt editing, undo, reference preservation,
   previous-run labeling, and library navigation. Live-run checks cover reported
   progress, early outputs, failure retention, pinning, comparison, and cancellation. It also checks desktop, tablet,
@@ -52,3 +53,9 @@ pnpm harness:shoot hero=mode=pro  # custom "name=query" shots
 
 The `live-runtime.ts` fixture emits simulated events and SVG outputs. It does not
 start inference or contact Relay. Pinned comparisons last for the editor session.
+
+The creative workflow checks save two completed outputs to the board, compare
+them at desktop and phone widths, reuse a result as an input, and insert a saved
+preset. `?sharing=1` uses `SharingRuntime` to exercise publication and revocation
+without credentials or hosted writes. These fixtures verify interaction and
+layout; they do not prove inference, authentication, or deployed Relay behavior.

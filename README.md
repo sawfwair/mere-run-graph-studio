@@ -46,6 +46,9 @@ versioned, but UI and integration details may still change between releases.
   graph input per file while the workflow keeps named references;
 - source-correlated scalar and media galleries on producing canvas nodes, with
   variant navigation and full-screen inspection;
+- output-to-input reuse, a persistent comparison board, and saved node/group
+  presets; see [Creative workflows](docs/creative-loop.md);
+- immutable hosted Run as App versions with share links and per-version revocation;
 - sidecar-only groups, notes, saved selections, alignment, and automatic layout;
 - reusable workflow programs and modules with map and branch visualization;
 - core and plugin-provider node catalogs;
@@ -92,6 +95,8 @@ platform. SSH and Relay targets remain portable because Studio sends the same
 immutable graph contract through the configured public client.
 
 ## Offline local Studio
+
+For setup, model and plugin preparation, and a packaged offline acceptance check, see [Run Graph Studio locally](docs/local-desktop.md).
 
 The desktop app is the complete local product. Launching it, authoring and
 saving projects, loading the local catalog, validation, preflight, and local

@@ -50,7 +50,7 @@ import {
   wouldCreateDependencyCycle,
 } from '../graph';
 import { portTypeKey, type StudioMode } from '../ui';
-import type { NodeRunPreview } from '../run-preview';
+import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { NodeExecutionState } from '../canvas-execution';
 import type { CatalogEntry, EditorSidecar, JsonObject, WorkflowGraph } from '../types';
 import { EditorGroupNode, type EditorGroupFlowNode } from './EditorGroupNode';
@@ -60,6 +60,7 @@ import { GraphOutputNode, type GraphOutputFlowNode } from './GraphOutputNode';
 import { WorkflowNode, type WorkflowFlowNode } from './WorkflowNode';
 
 export const NODE_DRAG_TYPE = 'application/x-mere-studio-node';
+export const PRESET_DRAG_TYPE = 'application/x-mere-studio-preset';
 
 export interface CanvasPosition {
   x: number;
@@ -80,6 +81,8 @@ interface GraphCanvasProps {
   pinnedPreviews: Record<string, NodeRunPreview>;
   onPinPreview: (nodeId: string) => void;
   onUnpinPreview: (nodeId: string) => void;
+  onSaveOutput: (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
+  onUseOutput?: (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
   mode: StudioMode;
   artifactBlob: (runId: string, path: string, contentType?: string) => Promise<Blob>;
   inputAssetBlob: (path: string, contentType?: string) => Promise<Blob>;
@@ -98,6 +101,7 @@ interface GraphCanvasProps {
   onDeleteOutputs: (names: string[]) => void;
   onDeleteEditorItems: (ids: string[]) => void;
   onDropNode: (entry: CatalogEntry, position: CanvasPosition) => void;
+  onDropPreset: (id: string, position: CanvasPosition) => void;
   onDropFiles: (paths: string[], position: CanvasPosition) => void;
   onUnsupportedFileDrop: () => void;
   onQuickAdd: (position: CanvasPosition) => void;
@@ -323,7 +327,7 @@ export function GraphCanvas({
   selectedOutputName,
   selectedEditorItemId,
   previews,
-  execution, pinnedPreviews, onPinPreview, onUnpinPreview,
+  execution, pinnedPreviews, onPinPreview, onUnpinPreview, onSaveOutput, onUseOutput,
   mode,
   artifactBlob,
   inputAssetBlob,
@@ -342,6 +346,7 @@ export function GraphCanvas({
   onDeleteOutputs,
   onDeleteEditorItems,
   onDropNode,
+  onDropPreset,
   onDropFiles,
   onUnsupportedFileDrop,
   onQuickAdd,
@@ -349,6 +354,14 @@ export function GraphCanvas({
   const { screenToFlowPosition } = useReactFlow();
   const shellRef = useRef<HTMLDivElement>(null);
   const [fileDropActive, setFileDropActive] = useState(false);
+  const compactOpening = mode === 'easy' && window.matchMedia('(max-width: 680px)').matches;
+  const firstNode = graph.nodes[0];
+  const openingPosition = firstNode
+    ? sidecar.nodes[firstNode.id] ?? { x: 80, y: 80 }
+    : Object.values(sidecar.inputs ?? {})[0] ?? { x: 32, y: 64 };
+  const openingViewport = compactOpening
+    ? { x: 28 - openingPosition.x * 0.82, y: 100 - openingPosition.y * 0.82, zoom: 0.82 }
+    : sidecar.viewport;
   const derivedNodes = useMemo<StudioFlowNode[]>(
     () => {
       const inputNodes: GraphInputFlowNode[] = Object.entries(graph.inputs).map(([name, definition], index) => ({
@@ -386,6 +399,8 @@ export function GraphCanvas({
           pinnedPreview: pinnedPreviews[value.id],
           onPinPreview: () => onPinPreview(value.id),
           onUnpinPreview: () => onUnpinPreview(value.id),
+          onSaveOutput: (preview, item) => onSaveOutput(value.id, preview, item),
+          onUseOutput: onUseOutput ? (preview, item) => onUseOutput(value.id, preview, item) : undefined,
           artifactBlob,
           availableModels,
           onRaceModels,
@@ -473,7 +488,7 @@ export function GraphCanvas({
     },
     [
       catalog,
-      execution, pinnedPreviews, onPinPreview, onUnpinPreview,
+      execution, pinnedPreviews, onPinPreview, onUnpinPreview, onSaveOutput, onUseOutput,
       artifactBlob,
       graph,
       inputAssetBlob,
@@ -628,6 +643,12 @@ export function GraphCanvas({
 
   const dropNode = useCallback(
     (event: DragEvent) => {
+      const presetId = event.dataTransfer.getData(PRESET_DRAG_TYPE);
+      if (presetId) {
+        event.preventDefault();
+        onDropPreset(presetId, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+        return;
+      }
       const key = event.dataTransfer.getData(NODE_DRAG_TYPE);
       if (!key) {
         if (event.dataTransfer.files.length) {
@@ -641,7 +662,7 @@ export function GraphCanvas({
       if (!entry) return;
       onDropNode(entry, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
     },
-    [catalog, onDropNode, onUnsupportedFileDrop, screenToFlowPosition],
+    [catalog, onDropNode, onDropPreset, onUnsupportedFileDrop, screenToFlowPosition],
   );
 
   useEffect(() => {
@@ -692,8 +713,8 @@ export function GraphCanvas({
       edges={edges}
       onNodesChange={onNodesChange}
       nodeTypes={nodeTypes}
-      defaultViewport={sidecar.viewport}
-      fitView={window.matchMedia('(max-width: 1080px)').matches}
+      defaultViewport={openingViewport}
+      fitView={!compactOpening && window.matchMedia('(max-width: 1080px)').matches}
       minZoom={0.25}
       maxZoom={1.8}
       fitViewOptions={{ padding: 0.2, maxZoom: 1.1 }}
@@ -752,7 +773,7 @@ export function GraphCanvas({
       }}
       onMoveEnd={moveEnd}
       onDragOver={(event) => {
-        if (event.dataTransfer.types.includes(NODE_DRAG_TYPE)) {
+        if (event.dataTransfer.types.includes(NODE_DRAG_TYPE) || event.dataTransfer.types.includes(PRESET_DRAG_TYPE)) {
           event.preventDefault();
           event.dataTransfer.dropEffect = 'copy';
         } else if (event.dataTransfer.types.includes('Files')) {

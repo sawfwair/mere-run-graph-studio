@@ -93,6 +93,9 @@ async function verifyInspectorCanvasInteraction() {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(base, { waitUntil: 'networkidle' });
   await page.waitForSelector('.app-shell', { timeout: 15000 });
+  if (await page.locator('.library-panel:visible, .library-rail:visible, .inspector-panel:visible, .inspector-rail:visible').count()) {
+    throw new Error('Easy canvas should open without persistent side panels');
+  }
 
   const firstNode = page.locator('.react-flow__node-workflow').first();
   await firstNode.click();
@@ -114,6 +117,7 @@ async function verifyInspectorCanvasInteraction() {
 
 async function verifyLibraryAndOutline() {
   await page.goto(base, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Show panels' }).click();
   await page.locator('.outline-step').first().click();
   await page.locator('.inspector-heading').filter({ hasText: 'Generate image' }).waitFor();
   await page.getByRole('button', { name: 'Back to workflow' }).click();
@@ -136,12 +140,11 @@ async function verifyMobileGraphFraming() {
   await page.goto(base, { waitUntil: 'networkidle' });
   await page.locator('.react-flow__node-workflow').first().waitFor();
   const canvas = await page.locator('.graph-canvas-shell').boundingBox();
-  const nodeBoxes = await page.locator('.react-flow__node-workflow').evaluateAll((elements) => elements.map((element) => {
-    const { x, y, width, height } = element.getBoundingClientRect();
-    return { x, y, width, height };
-  }));
-  if (!canvas || nodeBoxes.some((node) => node.x < canvas.x || node.x + node.width > canvas.x + canvas.width || node.y < canvas.y || node.y + node.height > canvas.y + canvas.height)) {
-    throw new Error('Mobile opening must frame every workflow node');
+  const firstNode = await page.locator('.react-flow__node-workflow').first().boundingBox();
+  if (!canvas || !firstNode || firstNode.width < 180 || firstNode.x < canvas.x ||
+    firstNode.x + firstNode.width > canvas.x + canvas.width || firstNode.y < canvas.y ||
+    firstNode.y + Math.min(firstNode.height, 150) > canvas.y + canvas.height) {
+    throw new Error('Mobile opening must show the first node at a readable size');
   }
   await page.getByRole('tab', { name: 'Library', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search nodes' }).fill('upscale');
@@ -194,6 +197,7 @@ async function verifyLiveCanvas() {
   await page.locator('.canvas-run-summary strong').filter({ hasText: 'Failed' }).waitFor();
   if (!await render.locator('.canvas-run-preview img').isVisible()) throw Error('Downstream failure must preserve upstream media');
   await render.getByRole('button', { name: 'Pin output', exact: true }).click();
+  await render.locator('.creative-node-settings summary').click();
   await page.getByRole('textbox', { name: 'Prompt for render', exact: true }).fill('A blue car at dusk');
   await render.locator('.output-caption').filter({ hasText: 'Previous run' }).waitFor();
   await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -232,12 +236,154 @@ async function verifyLiveRecovery() {
   console.log('✓ disconnected updates reconnect and failed cancellation can be retried');
 }
 
+async function verifyCreativeLoop() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?live=failed&mode=pro`, { waitUntil: 'networkidle' });
+  const render = page.locator('.react-flow__node-workflow[data-id="render"]');
+  for (let index = 0; index < 2; index++) {
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    await render.getByRole('progressbar').waitFor();
+    await page.locator('.canvas-run-summary strong').filter({ hasText: 'Failed' }).waitFor();
+    await render.getByRole('button', { name: 'Save to board', exact: true }).click();
+  }
+  await page.getByRole('tab', { name: /^Board/ }).click();
+  await page.locator('.board-card').nth(1).waitFor();
+  for (let index = 0; index < 2; index++) await page.locator('.board-card').nth(index).getByRole('button', { name: 'Compare', exact: true }).click();
+  await page.locator('.board-grid.comparing').waitFor();
+  await page.locator('.board-card img').nth(1).waitFor();
+  await page.screenshot({ path: resolve(outDir, 'creative-board.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await page.locator('.board-view').evaluate((element) => element.scrollWidth > element.clientWidth + 1)) throw Error('Mobile board must not overflow');
+  await page.screenshot({ path: resolve(outDir, 'creative-board-mobile.png') });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.locator('.board-card').first().getByRole('button', { name: 'Use as input', exact: true }).click();
+  await page.locator('.react-flow__node-graph-input').waitFor();
+  await render.locator('.workflow-node-header').click();
+  await page.getByRole('button', { name: 'Save preset', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('input').fill('Hero image');
+  await dialog.getByRole('button', { name: 'Save preset', exact: true }).click();
+  await page.locator('.library-panel').getByRole('tab', { name: 'Saved', exact: true }).click();
+  await page.locator('.saved-preset').first().waitFor();
+  await page.screenshot({ path: resolve(outDir, 'creative-presets.png') });
+  const before = await page.locator('.react-flow__node-workflow').count();
+  await page.locator('.saved-preset').first().getByRole('button', { name: /Hero image.*nodes/ }).click();
+  await page.waitForFunction((count) => document.querySelectorAll('.react-flow__node-workflow').length === count + 1, before);
+  console.log('✓ persistent board, desktop/mobile comparison, output reuse, and preset insertion');
+}
+
+async function verifyAppSharing() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?sharing=1`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Save workflow', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await page.getByRole('button', { name: 'Share app', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish new version', exact: true }).click();
+  await page.locator('.app-version').waitFor();
+  await page.screenshot({ path: resolve(outDir, 'creative-app-sharing.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const dialog = page.getByRole('dialog');
+  if (await dialog.evaluate((element) => element.scrollWidth > element.clientWidth + 1)) throw Error('Mobile sharing dialog must not overflow');
+  await page.screenshot({ path: resolve(outDir, 'creative-app-sharing-mobile.png') });
+  await page.getByRole('button', { name: 'Revoke', exact: true }).click();
+  await page.locator('.app-version').waitFor({ state: 'detached' });
+  console.log('✓ app version publication, desktop/mobile sharing, and revocation');
+}
+
+async function verifyTemplateDialog() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?template=1`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Show panels' }).click();
+  await page.locator('.template-list > button').first().click();
+  const dialog = page.locator('dialog.wide-dialog[open]');
+  await dialog.getByRole('button', { name: 'Create workflow' }).waitFor();
+  for (const width of [1600, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(250); // capture after the dialog entrance finishes
+    const layout = await dialog.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const field = element.querySelector('.template-form input')?.getBoundingClientRect();
+      return { overflow: element.scrollWidth > element.clientWidth + 1,
+        left: bounds.left, right: bounds.right, fieldLeft: field?.left, fieldRight: field?.right };
+    });
+    if (layout.overflow || layout.left < 0 || layout.right > width ||
+      layout.fieldLeft === undefined || layout.fieldLeft < layout.left ||
+      layout.fieldRight === undefined || layout.fieldRight > layout.right) {
+      throw Error(`Template dialog clips its fields at ${width}px: ${JSON.stringify(layout)}`);
+    }
+    await page.screenshot({ path: resolve(outDir, `template-dialog-${width}.png`) });
+  }
+  console.log('✓ template dialog fields fit at desktop and mobile widths');
+}
+
+async function verifyVideoImageConnection() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?video-unwired=1`, { waitUntil: 'networkidle' });
+  const source = page.locator('.react-flow__node-workflow[data-id="render"] .react-flow__handle[data-handleid="image"]');
+  const target = page.locator('.react-flow__node-workflow[data-id="clip"] .react-flow__handle[data-handleid="image"]');
+  const endImage = page.locator('.react-flow__node-workflow[data-id="clip"] .react-flow__handle[data-handleid="end_image"]');
+  await source.waitFor();
+  await target.waitFor();
+  await endImage.waitFor();
+  if (await page.locator('.react-flow__edge').count()) throw Error('Video image should start disconnected');
+  const from = await source.boundingBox();
+  const to = await target.boundingBox();
+  if (!from || !to) throw Error('Image connection handles are not visible');
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 1);
+  await page.locator('.react-flow__node-workflow[data-id="clip"] .port-row.wired').filter({ hasText: 'Image' }).waitFor();
+  await page.screenshot({ path: resolve(outDir, 'video-image-connected.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/?video-connected=1`, { waitUntil: 'networkidle' });
+  await page.locator('.react-flow__node-workflow[data-id="clip"] .port-row.wired').filter({ hasText: 'Image' }).waitFor();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) {
+    throw Error('Connected video image overflows the mobile viewport');
+  }
+  const canvas = await page.locator('.graph-canvas-shell').boundingBox();
+  const firstNode = await page.locator('.react-flow__node-workflow').first().boundingBox();
+  if (!canvas || !firstNode || firstNode.width < 180 || firstNode.x < canvas.x ||
+    firstNode.x + firstNode.width > canvas.x + canvas.width) {
+    throw Error('Connected video workflow does not open at a readable size on mobile');
+  }
+  await page.screenshot({ path: resolve(outDir, 'video-image-connected-mobile.png') });
+  console.log('✓ optional video image and end image ports appear, image output connects, and mobile layout fits');
+}
+
 await verifyLiveCanvas();
 await verifyLiveRecovery();
+await verifyCreativeLoop();
+await verifyAppSharing();
+await verifyTemplateDialog();
+await verifyVideoImageConnection();
 await verifyNodePromptEditing();
 await verifyInspectorCanvasInteraction();
 await verifyLibraryAndOutline();
 await verifyMobileGraphFraming();
+
+for (const { name, query, width } of [
+  { name: 'desktop-setup', query: 'setup=1', width: 1600 },
+  { name: 'desktop-setup-mobile', query: 'setup=1', width: 390 },
+  { name: 'desktop-setup-missing', query: 'setup=missing', width: 1600 },
+  { name: 'desktop-setup-missing-mobile', query: 'setup=missing', width: 390 },
+]) {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto(`${base}/?${query}`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Find tools' }).waitFor();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+  if (overflow) throw Error(`${name} overflows horizontally`);
+  if (query === 'setup=1') {
+    await page.getByText('Optional plugins').click();
+    await page.getByRole('button', { name: 'Review installation' }).last().click();
+    await page.getByText('Install signed image compose bundle').waitFor();
+  }
+  await page.screenshot({ path: resolve(outDir, `${name}.png`), fullPage: true });
+  console.log(`✓ ${name}.png`);
+}
 
 for (const { name, query, viewport, view } of shots) {
   await page.setViewportSize(viewport);
@@ -277,4 +423,4 @@ if (browserErrors.length) throw new Error(`Browser errors:\n${browserErrors.join
 
 await browser.close();
 await server.close();
-console.log(`\nWrote ${shots.length + 7} shot(s) to ${outDir}`);
+console.log(`\nWrote ${shots.length + 15} shot(s) to ${outDir}`);

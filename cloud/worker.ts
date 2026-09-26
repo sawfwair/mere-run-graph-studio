@@ -1,5 +1,6 @@
 import { StudioAccount } from './account';
 import { authenticate, finishAuth, logout, refreshAuth, startAuth } from './auth';
+import { isRecord } from './decode';
 import type { Env } from './types';
 
 export { StudioAccount };
@@ -78,12 +79,33 @@ async function authRoute(request: Request, env: Env, url: URL): Promise<Response
   return null;
 }
 
+async function publishAppResponse(request: Request, env: Env, userId: string): Promise<Response> {
+    const response = await accountRequest(request, env, userId);
+    if (!response.ok) return response;
+    const version: unknown = await response.json();
+    if (!isRecord(version) || typeof version.token !== 'string') return Response.json({ error: 'Invalid app version' }, { status: 502 });
+    const ownerId = env.STUDIO_ACCOUNTS.idFromName(userId).toString();
+    return noStore(Response.json({ ...version, url: `/app?share=${ownerId}.${version.token}` }, { status: 201 }));
+}
+
+async function listAppVersionsResponse(request: Request, env: Env, userId: string): Promise<Response> {
+    const response = await accountRequest(request, env, userId);
+    if (!response.ok) return response;
+    const body: unknown = await response.json();
+    if (!isRecord(body) || !Array.isArray(body.versions)) return Response.json({ error: 'Invalid app versions' }, { status: 502 });
+    const ownerId = env.STUDIO_ACCOUNTS.idFromName(userId).toString();
+    return noStore(Response.json({ versions: body.versions.filter(isRecord).filter((item): item is Record<string, unknown> & { token: string } => typeof item.token === 'string')
+      .map((item) => ({ ...item, url: `/app?share=${ownerId}.${item.token}` })) }));
+}
+
 async function apiRoute(request: Request, env: Env, url: URL): Promise<Response> {
   const session = await authenticate(request, env);
   if (!session) return Response.json({ error: 'Unauthorized' }, { status: 401 });
   if (!['GET', 'HEAD'].includes(request.method) && request.headers.get('Origin') !== env.STUDIO_ORIGIN) {
     return Response.json({ error: 'Cross-origin session mutation denied' }, { status: 403 });
   }
+  if (`${request.method} ${url.pathname}` === 'POST /api/studio/app-version') return publishAppResponse(request, env, session.identity.user_id);
+  if (`${request.method} ${url.pathname}` === 'GET /api/studio/app-versions') return listAppVersionsResponse(request, env, session.identity.user_id);
   if (url.pathname.startsWith('/api/studio/')) return accountRequest(request, env, session.identity.user_id);
   if (url.pathname.startsWith('/api/relay/')) return relayRequest(request, env, session.token);
   return new Response('Not Found', { status: 404 });
@@ -91,6 +113,16 @@ async function apiRoute(request: Request, env: Env, url: URL): Promise<Response>
 
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  const shared = /^\/api\/shared-app\/([0-9a-f]{64})\/([0-9a-f-]{36})$/.exec(url.pathname);
+  if (shared && request.method === 'GET') {
+    try {
+      const id = env.STUDIO_ACCOUNTS.idFromString(shared[1]);
+      const response = await env.STUDIO_ACCOUNTS.get(id).fetch(
+        new Request(`${url.origin}/shared-app?token=${encodeURIComponent(shared[2])}`),
+      );
+      return secure(response, env);
+    } catch { return Response.json({ error: 'Shared app not found' }, { status: 404 }); }
+  }
   const authResponse = await authRoute(request, env, url);
   if (authResponse) return authResponse;
   if (url.pathname.startsWith('/api/')) return apiRoute(request, env, url);

@@ -1,4 +1,4 @@
-import { buildGraphSubmission, type GraphFleetCapabilities } from './cloud-contract';
+import { buildGraphSubmission, type AssetManifest, type GraphFleetCapabilities, type GraphSubmission } from './cloud-contract';
 import {
   arrayValue,
   decodeArray,
@@ -8,6 +8,9 @@ import {
   decodeRunEvent,
   decodeStudioProject,
   decodeStudioProjectPackage,
+  decodeEditorSidecar,
+  decodeWorkflowGraph,
+  decodeJsonObject,
   nullableString,
   optionalNumber,
   optionalString,
@@ -33,7 +36,22 @@ import type {
   WorkflowGraph,
   WorkflowProgram,
 } from './types';
-import { pollModelPull, type StudioRuntime } from './runtime';
+import { pollModelPull, type ImportedAsset, type StudioRuntime } from './runtime';
+
+export interface SharedAppVersion {
+  token: string;
+  path: string;
+  title: string;
+  created_at: string;
+  url: string;
+}
+
+function decodeSharedAppVersion(value: unknown, path: string): SharedAppVersion {
+  const source = recordValue(value, path);
+  return { token: stringValue(source.token, `${path}.token`),
+    path: stringValue(source.path, `${path}.path`), title: stringValue(source.title, `${path}.title`),
+    created_at: stringValue(source.created_at, `${path}.created_at`), url: stringValue(source.url, `${path}.url`) };
+}
 
 // Relay fleet + model-plan contract (subset consumed here). Hosted Studio has no
 // local model store; installs run as fleet model-plans dispatched to paired
@@ -71,6 +89,19 @@ interface RelayRun {
   error?: string | null;
   placement?: JsonValue;
   metrics?: JsonValue;
+}
+
+const RUN_ASSET_PATTERN = /^run-artifact:\/\/([a-f0-9-]{36})\/(.+)$/;
+
+function runAssetSource(value: string): { id: string; name: string } {
+  const match = RUN_ASSET_PATTERN.exec(value);
+  if (!match) throw new Error('Hosted input must reference one of your run artifacts.');
+  return { id: match[1], name: decodeURIComponent(match[2]) };
+}
+
+function sha256Bytes(bytes: ArrayBuffer): Promise<string> {
+  return crypto.subtle.digest('SHA-256', bytes).then((digest) =>
+    Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join(''));
 }
 
 function decodeProvider(value: unknown, path: string): { id: string; version: string; catalog_sha256: string; node_kinds: string[] } {
@@ -320,10 +351,29 @@ export class CloudRuntime implements StudioRuntime {
   private capabilities: GraphFleetCapabilities | null = null;
   private readonly modelPlans = new Map<string, string>();
 
+  private async prepareSubmission(graph: WorkflowGraph, inputs: JsonObject): Promise<{
+    submission: GraphSubmission; blobs: Map<string, Blob>;
+  }> {
+    const groups: AssetManifest['groups'] = [];
+    const blobs = new Map<string, Blob>();
+    for (const [name, definition] of Object.entries(graph.inputs)) {
+      if (definition.type !== 'asset' || typeof inputs[name] !== 'string') continue;
+      const source = runAssetSource(inputs[name]);
+      const blob = await this.artifactBlob(source.id, source.name);
+      const digest = await sha256Bytes(await blob.arrayBuffer());
+      const contentType = blob.type || 'application/octet-stream';
+      groups.push({ name, kind: 'asset', entries: [{ path: source.name, digest,
+        size_bytes: blob.size, content_type: contentType }] });
+      blobs.set(digest, blob);
+    }
+    const submission = await buildGraphSubmission(graph, inputs, await this.fleet(), { schema_version: 1, groups });
+    return { submission, blobs };
+  }
+
   private async refreshRequest<T>(path: string, decoder: Decoder<T>, init?: RequestInit): Promise<T> {
     const refresh = await fetch('/auth/refresh', { method: 'POST', headers: { Origin: window.location.origin } });
     if (refresh.ok) return this.request(path, decoder, init, true);
-    window.location.assign(`/auth/start?return_to=${encodeURIComponent(window.location.pathname)}`);
+    window.location.assign(`/auth/start?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`);
     throw new Error('Your session expired. Redirecting to mere.world…');
   }
 
@@ -372,6 +422,34 @@ export class CloudRuntime implements StudioRuntime {
     return this.request('/api/studio/project', decodeSavedProject, { method: 'PUT', body: JSON.stringify(project) });
   }
 
+  publishAppVersion(path: string): Promise<SharedAppVersion> {
+    return this.request('/api/studio/app-version', decodeSharedAppVersion,
+      { method: 'POST', body: JSON.stringify({ path }) });
+  }
+
+  async listAppVersions(path: string): Promise<SharedAppVersion[]> {
+    const response = await this.request(`/api/studio/app-versions?path=${encodeURIComponent(path)}`, (value, location) => {
+      const body = recordValue(value, location);
+      return decodeArray(body.versions, decodeSharedAppVersion, `${location}.versions`);
+    });
+    return response;
+  }
+
+  async revokeAppVersion(token: string): Promise<void> {
+    await this.request(`/api/studio/app-version?token=${encodeURIComponent(token)}`, () => undefined, { method: 'DELETE' });
+  }
+
+  async loadSharedApp(ownerId: string, token: string): Promise<{ graph: WorkflowGraph; inputs: JsonObject; sidecar: EditorSidecar }> {
+    const path = `/api/shared-app/${encodeURIComponent(ownerId)}/${encodeURIComponent(token)}`;
+    return this.request(path, (value, location) => {
+      const body = recordValue(value, location);
+      if (body.contract_version !== 'mere.run/graph-studio-shared-app.v1') throw new Error('Unsupported shared app version.');
+      return { graph: decodeWorkflowGraph(body.graph, `${location}.graph`),
+        inputs: decodeJsonObject(body.inputs, `${location}.inputs`),
+        sidecar: decodeEditorSidecar(body.sidecar, `${location}.sidecar`) };
+    });
+  }
+
   exportProject(project: Omit<StudioProject, 'path'>): Promise<StudioProjectPackage> {
     return Promise.resolve({ contract_version: 'mere.run/graph-studio-project.v1', ...structuredClone(project) });
   }
@@ -392,7 +470,7 @@ export class CloudRuntime implements StudioRuntime {
     _executor: string,
   ): Promise<CommandDocument<JsonValue>> {
     try {
-      const submission = await buildGraphSubmission(graph, inputs, await this.fleet());
+      const { submission } = await this.prepareSubmission(graph, inputs);
       if (mode === 'validate') return command({ valid: true, job: submission.job });
       const result = await this.request('/api/relay/api/graph-jobs/preflight', decodeJsonValue, {
         method: 'POST',
@@ -421,11 +499,22 @@ export class CloudRuntime implements StudioRuntime {
   }
 
   async startRun(graph: WorkflowGraph, inputs: JsonObject, _executor: string): Promise<StudioRun> {
-    const submission = await buildGraphSubmission(graph, inputs, await this.fleet());
-    const created = await this.request('/api/relay/api/graph-jobs', decodeRelayRun, {
+    const { submission, blobs } = await this.prepareSubmission(graph, inputs);
+    const created = await this.request('/api/relay/api/graph-jobs', (value, path) => {
+      const body = recordValue(value, path);
+      return { ...decodeRelayRun(value, path), missing_asset_digests: decodeArray(body.missing_asset_digests, stringValue, `${path}.missing_asset_digests`) };
+    }, {
       method: 'POST',
       body: JSON.stringify(submission),
     });
+    for (const digest of created.missing_asset_digests) {
+      const blob = blobs.get(digest);
+      if (!blob) throw new Error(`Relay requested an undeclared asset: ${digest}`);
+      const response = await fetch(`/api/relay/api/graph-jobs/${created.job_id}/assets/${digest}`, {
+        method: 'PUT', headers: { Origin: window.location.origin, 'Content-Type': blob.type || 'application/octet-stream' }, body: blob,
+      });
+      if (!response.ok) throw responseError(await responseBody(response), 'asset upload', response.status);
+    }
     const committed = await this.request(`/api/relay/api/graph-jobs/${created.job_id}/commit`, decodeRelayRun, {
       method: 'POST',
       body: '{}',
@@ -492,8 +581,17 @@ export class CloudRuntime implements StudioRuntime {
     return Promise.reject(new Error('File drop is available in the desktop app. Hosted asset upload is not enabled yet.'));
   }
 
-  inputAssetBlob(_path: string, _contentType?: string): Promise<Blob> {
-    return Promise.reject(new Error('Workspace input assets are only available in the desktop app.'));
+  async importRunArtifact(id: string, path: string): Promise<ImportedAsset> {
+    const run = await this.inspectRun(id);
+    const artifact = run.artifacts?.find((candidate) => candidate.path === path);
+    if (!artifact) throw new Error('Artifact is not declared by this run.');
+    return { name: artifact.name, path: `run-artifact://${id}/${encodeURIComponent(artifact.name)}`,
+      content_type: artifact.content_type ?? 'application/octet-stream', size_bytes: artifact.size_bytes ?? 0 };
+  }
+
+  inputAssetBlob(path: string, _contentType?: string): Promise<Blob> {
+    const source = runAssetSource(path);
+    return this.artifactBlob(source.id, source.name);
   }
 
   templates(): Promise<{ available: boolean; document: CommandDocument<{ templates: TemplateEntry[] }> | null }> {

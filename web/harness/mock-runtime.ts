@@ -10,22 +10,24 @@ const ok = <T>(result: T | null, error = ''): CommandDocument<T> => ({ exit_code
 const idle = (): ModelPull => ({ model: '', state: 'installed', percent: 100, received_bytes: null, total_bytes: null, detail: '', install_path: null, stderr: '', updated_at: '' });
 
 export const HARNESS_CATALOG: CatalogEntry[] = [
-  { kind: 'text.prompt', title: 'Prompt', category: 'text', inputs: [{ name: 'text', type: 'string', required: true }], outputs: [{ name: 'text', type: 'string' }] },
+  { kind: 'text.prompt', title: 'Prompt', category: 'text', inputs: [{ name: 'text', type: 'string', required: true }], outputs: [{ name: 'text', type: 'string' }], requirements: { network_access: false } },
   { kind: 'image.generate', title: 'Generate image', category: 'image', inputs: [{ name: 'prompt', type: 'string', required: true }, { name: 'model', type: 'string' }, { name: 'seed', type: 'number' }], outputs: [{ name: 'image', type: 'asset' }] },
   { kind: 'image.upscale', title: 'Upscale image', category: 'image', inputs: [{ name: 'image', type: 'asset', required: true }], outputs: [{ name: 'image', type: 'asset' }] },
-  { kind: 'video.generate', title: 'Generate video', category: 'video', inputs: [{ name: 'prompt', type: 'string' }, { name: 'image', type: 'asset' }, { name: 'model', type: 'string' }], outputs: [{ name: 'video', type: 'asset' }] },
+  { kind: 'video.generate', title: 'Generate video', category: 'video', inputs: [{ name: 'prompt', type: 'string', required: true }, { name: 'image', type: 'asset', required: false }, { name: 'end_image', type: 'asset', required: false }, { name: 'model', type: 'string', required: false }], outputs: [{ name: 'video', type: 'asset' }], requirements: { network_access: true } },
   { kind: 'audio.generate', title: 'Generate audio', category: 'audio', inputs: [{ name: 'prompt', type: 'string' }], outputs: [{ name: 'audio', type: 'asset' }] },
   { kind: 'boolean.value', title: 'Boolean', category: 'values', inputs: [{ name: 'value', type: 'boolean', required: true }], outputs: [{ name: 'value', type: 'boolean' }] },
   { kind: 'number.value', title: 'Number', category: 'values', inputs: [{ name: 'value', type: 'number', required: true }], outputs: [{ name: 'value', type: 'number' }] },
   { kind: 'dataset.prepare', title: 'Prepare dataset', category: 'dataset', inputs: [{ name: 'source', type: 'asset' }], outputs: [{ name: 'dataset', type: 'json' }] },
 ];
 
-export function createMockRuntime(example = false): StudioRuntime {
+export function createMockRuntime(example = false, templates = false): StudioRuntime {
   const mock: StudioRuntime = {
     executionScope: 'cloud' as const,
     catalog: async () => ok({ nodes: [...HARNESS_CATALOG, ...(example ? [{ kind: 'text.value', title: 'Text value', category: 'text', presentation: { style: 'material', primary_argument: 'value' }, inputs: [{ name: 'value', type: 'string', required: true, multiline: true }], outputs: [{ name: 'text', type: 'string' }] } satisfies CatalogEntry] : [])] }),
     executors: async () => ok({ executors: [{ kind: 'relay', name: 'fleet' }] }),
-    templates: async () => ({ available: false, document: ok({ templates: [] }) }),
+    templates: async () => ({ available: templates, document: ok({ templates: templates ? [
+      { id: 'product-hero', title: 'Product hero', description: 'Create a product image and video.', tags: ['image', 'video'] },
+    ] : [] }) }),
     projects: async () => ({ projects: [] }),
     listRuns: async () => ({ runs: example ? [await nodeFixtureRun()] : [] }),
     inspectRun: async () => { if (example) return nodeFixtureRun(); throw new Error('harness: no runs'); },
@@ -38,6 +40,7 @@ export function createMockRuntime(example = false): StudioRuntime {
     artifactBlob: async () => new Blob([]),
     inputAssetBlob: async () => new Blob([]),
     importAssets: async () => ({ assets: [] }),
+    importRunArtifact: async () => ({ name: 'output.png', path: 'assets/harness/output.png', content_type: 'image/png', size_bytes: 100 }),
     saveProject: async () => ({ status: 'ok', path: 'untitled' }),
     loadProject: async () => { throw new Error('harness: no projects'); },
     exportProject: async (project) => ({ contract_version: 'mere.run/graph-studio-project.v1', ...project }),
@@ -50,7 +53,18 @@ export function createMockRuntime(example = false): StudioRuntime {
     fetchRun: async () => { throw new Error('harness: run unsupported'); },
     retryRun: async () => { throw new Error('harness: run unsupported'); },
     resumeRun: async () => { throw new Error('harness: run unsupported'); },
-    loadTemplate: async () => { throw new Error('harness: templates unsupported'); },
+    loadTemplate: async () => {
+      if (!templates) throw new Error('harness: templates unsupported');
+      return {
+        graph: { ...HARNESS_PROJECT.graph, name: 'Product hero', inputs: {
+          product: { type: 'string' as const, required: true, default: 'Ceramic lamp' },
+          description: { type: 'string' as const, required: true, default: 'Product photograph on a pale green set' },
+        } },
+        inputs: { product: 'Ceramic lamp', description: 'Product photograph on a pale green set' },
+        sidecar: HARNESS_PROJECT.sidecar,
+        document: ok(null),
+      };
+    },
     publishTemplate: async () => { throw new Error('harness: templates unsupported'); },
     inspectComfy: async () => ok(null, 'harness: comfy unsupported'),
     importComfy: async () => { throw new Error('harness: comfy unsupported'); },

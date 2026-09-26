@@ -4,6 +4,7 @@ import {
   AlignVerticalJustifyCenter,
   AppWindow,
   BookmarkPlus,
+  Columns2,
   Check,
   ArrowRight,
   CloudCog,
@@ -33,6 +34,7 @@ import {
 import { ReactFlowProvider } from '@xyflow/react';
 
 import { AppView, type AppVariation } from './components/AppView';
+import { BoardView } from './components/BoardView';
 import { ModelInstallSheet } from './components/ModelInstallSheet';
 import { buildVariationInputs, variationValues, type VariationCandidate } from './app-mode';
 import { buildModelVariants, executorsWithModel, missingModels, parseInstalledModels, parseInstalledModelsByExecutor } from './models';
@@ -40,6 +42,7 @@ import { CloudLanding } from './components/CloudLanding';
 import { CommandPalette, type PaletteGroup } from './components/CommandPalette';
 import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
 import { DesktopSetup } from './components/DesktopSetup';
+import { DesktopTools } from './components/DesktopTools';
 import { GraphCanvas, type CanvasPosition } from './components/GraphCanvas';
 import { HelpOverlay } from './components/HelpOverlay';
 import { Inspector } from './components/Inspector';
@@ -79,9 +82,12 @@ import {
   uniqueId,
 } from './graph';
 import { loadRecoveredDocument, useDocumentHistory } from './history';
-import { CloudRuntime } from './cloud-runtime';
+import { CloudRuntime, type SharedAppVersion } from './cloud-runtime';
 import { captureRunSource } from './canvas-execution';
 import { useCanvasRun } from './use-canvas-run';
+import { removeBoardOutput, saveBoardOutput } from './creative-board';
+import { capturePreset, insertPreset, loadPresetLibrary, storePresetLibrary, type SavedPreset } from './presets';
+import type { NodeRunPreview, NodeRunPreviewItem } from './run-preview';
 import { CanvasRunBar } from './components/CanvasRunBar';
 import { decodeJsonObject, decodeWorkflowGraph, parseJsonValue, recordValue } from './decode';
 import {
@@ -96,6 +102,7 @@ import type {
   CatalogEntry,
   CommandDocument,
   Diagnostic,
+  EditorBoardItem,
   EditorSidecar,
   JsonObject,
   JsonValue,
@@ -150,6 +157,26 @@ function readFlag(key: string): boolean {
 }
 function writeFlag(key: string, value: boolean): void {
   try { window.localStorage.setItem(key, value ? '1' : '0'); } catch { /* private mode */ }
+}
+function loadCanvasFocus(): boolean {
+  try { return window.localStorage.getItem('mere-studio-canvas-focus') !== '0'; }
+  catch { return true; }
+}
+function workspaceShellClass(
+  mode: StudioMode, view: StudioView, leftCollapsed: boolean, rightCollapsed: boolean,
+  focusCanvas: boolean, selectedNodeCount: number, selectedInputName: string | null,
+  selectedOutputName: string | null, selectedEditorItemId: string | null,
+): string {
+  const hasSelection = Boolean(selectedNodeCount || selectedInputName || selectedOutputName || selectedEditorItemId);
+  return `app-shell mode-${mode}${leftCollapsed ? ' left-collapsed' : ''}${rightCollapsed ? ' right-collapsed' : ''}${view === 'canvas' && mode === 'easy' && focusCanvas ? ' canvas-focused' : ''}${hasSelection ? ' canvas-has-selection' : ''}`;
+}
+function CanvasFocusToggle({ mode, focusCanvas, onToggle }: {
+  mode: StudioMode; focusCanvas: boolean; onToggle: () => void;
+}) {
+  if (mode !== 'easy') return null;
+  return <button className="canvas-focus-toggle" aria-pressed={focusCanvas} onClick={onToggle}>
+    <Columns2 size={14} /> {focusCanvas ? 'Show panels' : 'Focus canvas'}
+  </button>;
 }
 
 function editableShortcutTarget(target: EventTarget | null): boolean {
@@ -237,6 +264,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     dirty,
   } = useDocumentHistory(initialDocument, recoveredDocument === null);
   const { graph, inputs, sidecar, program } = document;
+  const boardItems = useMemo(() => sidecar.board ?? [], [sidecar.board]);
   const setGraph = useCallback((next: WorkflowGraph) => {
     commitDocument((current) => ({ ...current, graph: next }));
   }, [commitDocument]);
@@ -249,8 +277,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const [mode, setMode] = useState<StudioMode>(loadStoredMode);
   const [leftCollapsed, setLeftCollapsed] = useState(() => readFlag('mere-studio-left-collapsed'));
   const [rightCollapsed, setRightCollapsed] = useState(() => readFlag('mere-studio-right-collapsed'));
+  const [focusCanvas, setFocusCanvas] = useState(loadCanvasFocus);
   useEffect(() => writeFlag('mere-studio-left-collapsed', leftCollapsed), [leftCollapsed]);
   useEffect(() => writeFlag('mere-studio-right-collapsed', rightCollapsed), [rightCollapsed]);
+  useEffect(() => writeFlag('mere-studio-canvas-focus', focusCanvas), [focusCanvas]);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [executors, setExecutors] = useState(['local']);
   const [executor, setExecutor] = useState('local');
@@ -299,6 +329,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   }[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateEntry[]>([]);
+  const [presets, setPresets] = useState<SavedPreset[]>(loadPresetLibrary);
+  const [presetName, setPresetName] = useState('');
+  const [appVersions, setAppVersions] = useState<SharedAppVersion[]>([]);
+  const [shareBusy, setShareBusy] = useState(false);
   const [templateDraft, setTemplateDraft] = useState<{
     id: string;
     graph: WorkflowGraph;
@@ -316,6 +350,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const comfyDialog = useRef<HTMLDialogElement>(null);
   const templateDialog = useRef<HTMLDialogElement>(null);
   const publishDialog = useRef<HTMLDialogElement>(null);
+  const presetDialog = useRef<HTMLDialogElement>(null);
+  const shareDialog = useRef<HTMLDialogElement>(null);
+  const loadedShare = useRef<string | null>(null);
+
   const comfyFile = useRef<HTMLInputElement>(null);
   const projectFile = useRef<HTMLInputElement>(null);
 
@@ -343,6 +381,22 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setDrawerOpen(true);
     pushToast('error', title, message);
   }, [pushToast]);
+
+  useEffect(() => {
+    if (!(runtime instanceof CloudRuntime)) return;
+    const share = new URLSearchParams(window.location.search).get('share');
+    if (!share || loadedShare.current === share) return;
+    const match = /^([0-9a-f]{64})\.([0-9a-f-]{36})$/.exec(share);
+    if (!match) return;
+    loadedShare.current = share;
+    void runtime.loadSharedApp(match[1], match[2]).then((snapshot) => {
+      canvas.reset();
+      replaceDocument(snapshot, true);
+      setProjectPath(null);
+      setView('app');
+      pushToast('success', 'Shared app opened', 'Run it on your own paired executor, or save a copy to edit.');
+    }).catch((error: unknown) => showError('Could not open shared app', error));
+  }, [runtime, canvas, replaceDocument, pushToast, showError]);
 
   const refreshRuns = useCallback(async () => {
     try {
@@ -652,6 +706,74 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     }
   }, [commitDocument, graph, inputs, pushToast, runtime, showError, sidecar]);
 
+  const saveOutput = (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => {
+    try {
+      const result = saveBoardOutput(sidecar, nodeId, preview, item);
+      if (result.sidecar !== sidecar) setSidecar(result.sidecar);
+      pushToast('success', 'Saved to comparison board', result.item.name);
+    } catch (error) { showError('Could not save output', error); }
+  };
+
+  const applyBoardOutput = async (item: EditorBoardItem) => {
+    setBusy('Importing output');
+    try {
+      const asset = await runtime.importRunArtifact(item.run_id, item.path);
+      const name = uniqueId(asset.name.replace(/\.[^.]+$/, ''), Object.keys(graph.inputs));
+      const origin = sidecar.nodes[item.node_id] ?? { x: 80, y: 80 };
+      commitDocument((current) => ({
+        ...current,
+        graph: { ...current.graph, inputs: { ...current.graph.inputs, [name]: {
+          type: 'asset', required: true,
+        } } },
+        inputs: { ...current.inputs, [name]: asset.path },
+        sidecar: { ...current.sidecar, inputs: { ...current.sidecar.inputs,
+          [name]: { x: origin.x + 380, y: origin.y + 60 },
+        } },
+      }));
+      selectInput(name);
+      setView('canvas');
+      pushToast('success', 'Output added as input', 'Connect it to a new node to refine or branch.');
+    } catch (error) { showError('Could not use output', error); }
+    finally { setBusy(null); }
+  };
+
+  const useOutput = (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => {
+    try {
+      const saved = saveBoardOutput(sidecar, nodeId, preview, item);
+      if (saved.sidecar !== sidecar) setSidecar(saved.sidecar);
+      void applyBoardOutput(saved.item);
+    } catch (error) { showError('Could not use output', error); }
+  };
+
+  const saveReusablePreset = () => {
+    try {
+      const preset = capturePreset(graph, sidecar, selectedNodeIds, presetName);
+      const next = [preset, ...presets];
+      storePresetLibrary(next);
+      setPresets(next);
+      presetDialog.current?.close();
+      pushToast('success', 'Preset saved', preset.title);
+    } catch (error) { showError('Could not save preset', error); }
+  };
+
+  const addPreset = (preset: SavedPreset, position?: CanvasPosition) => {
+    try {
+      const result = insertPreset(graph, sidecar, preset, position ?? { x: 120, y: 120 });
+      commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
+      selectNodes(result.nodeIds);
+      setView('canvas');
+      pushToast('success', 'Preset added', preset.title);
+    } catch (error) { showError('Could not add preset', error); }
+  };
+
+  const removePreset = (id: string) => {
+    try {
+      const next = presets.filter((item) => item.id !== id);
+      storePresetLibrary(next);
+      setPresets(next);
+    } catch (error) { showError('Could not remove preset', error); }
+  };
+
   const exposeOutput = (nodeId: string, outputName: string) => {
     const result = addGraphOutput(graph, sidecar, nodeId, outputName);
     commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
@@ -811,6 +933,39 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     } finally {
       setBusy(null);
     }
+  };
+
+  const openShareDialog = async () => {
+    if (!(runtime instanceof CloudRuntime)) { await exportProject(); return; }
+    shareDialog.current?.showModal();
+    if (!projectPath) return;
+    try { setAppVersions(await runtime.listAppVersions(projectPath)); }
+    catch (error) { showError('Could not load app versions', error); }
+  };
+
+  const publishAppVersion = async () => {
+    if (!(runtime instanceof CloudRuntime) || !projectPath) return;
+    setShareBusy(true);
+    try {
+      const current = { graph, inputs, sidecar, program };
+      await runtime.saveProject({ path: projectPath, ...current });
+      markSaved(current);
+      const version = await runtime.publishAppVersion(projectPath);
+      setAppVersions((previous) => [version, ...previous]);
+      pushToast('success', 'App version published', 'Anyone with its link can view this snapshot.');
+    } catch (error) { showError('App publication failed', error); }
+    finally { setShareBusy(false); }
+  };
+
+  const revokeAppVersion = async (token: string) => {
+    if (!(runtime instanceof CloudRuntime)) return;
+    setShareBusy(true);
+    try {
+      await runtime.revokeAppVersion(token);
+      setAppVersions((previous) => previous.filter((version) => version.token !== token));
+      pushToast('success', 'App link revoked');
+    } catch (error) { showError('Could not revoke app link', error); }
+    finally { setShareBusy(false); }
   };
 
   const importProject = async (file: File) => {
@@ -1369,6 +1524,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       catalog={catalog}
       graph={graph}
       templates={templates}
+      presets={presets}
       workflowToolsAvailable={workflowToolsAvailable}
       mode={mode}
       collapsed={leftCollapsed}
@@ -1379,6 +1535,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       onLoadTemplate={(templateId) => void loadTemplate(templateId)}
       onImportComfy={() => comfyFile.current?.click()}
       onPublishTemplate={openPublishTemplate}
+      onAddPreset={(preset) => addPreset(preset)}
+      onRemovePreset={removePreset}
     />
   );
 
@@ -1415,7 +1573,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   );
 
   return (
-    <div className={`app-shell mode-${mode}${leftCollapsed ? ' left-collapsed' : ''}${rightCollapsed ? ' right-collapsed' : ''}`}>
+    <div className={workspaceShellClass(mode, view, leftCollapsed, rightCollapsed, focusCanvas,
+      selectedNodeIds.length, selectedInputName, selectedOutputName, selectedEditorItemId)}>
       {(() => (
       <header className="topbar">
         <div className="brand-block">
@@ -1483,6 +1642,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           <div className="segmented" role="tablist">
             <button role="tab" aria-selected={view === 'app'} title="Run as app" className={viewTabClass(view, 'app', 'app-tab')} onClick={() => setView('app')}><AppWindow size={14} /> App</button>
             <button role="tab" aria-selected={view === 'canvas'} title="Canvas (1)" className={viewTabClass(view, 'canvas')} onClick={() => setView('canvas')}><Workflow size={14} /> Canvas</button>
+            <button role="tab" aria-selected={view === 'board'} title="Comparison board" className={viewTabClass(view, 'board')} onClick={() => setView('board')}><Columns2 size={14} /> Board{sidecar.board?.length ? ` ${sidecar.board.length}` : ''}</button>
             {mode === 'pro' ? (
               <button role="tab" aria-selected={view === 'program'} title="Program (2)" className={viewTabClass(view, 'program')} onClick={() => setView('program')}><Frame size={14} /> Program</button>
             ) : null}
@@ -1517,7 +1677,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             onRun={() => void runGraph({ keepView: true })}
             onRunVariations={(candidate, count) => void runVariations(candidate, count)}
             onClearVariations={clearVariations}
-            onShare={() => void exportProject()}
+            onShare={() => void openShareDialog()}
             onEditGraph={() => setView('canvas')}
             onRunOnExecutor={(execId) => void runGraph({ keepView: true, executor: execId })}
             canInstallModels={canInstallModels}
@@ -1525,6 +1685,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             artifactBlob={(id, path, contentType) => runtime.artifactBlob(id, path, contentType)}
             inputAssetBlob={(path, contentType) => runtime.inputAssetBlob(path, contentType)}
           />
+        ) : view === 'board' ? (
+          <BoardView items={boardItems} artifactBlob={loadCanvasArtifact}
+            onRemove={(id) => setSidecar(removeBoardOutput(sidecar, id))}
+            onUse={(item) => void applyBoardOutput(item)} />
         ) : view === 'canvas' ? ((() => (
           <div className="canvas-view">
             <CanvasRunBar run={canvas.run} previous={!canvas.matches} error={canvas.streamError}
@@ -1532,7 +1696,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               onDetails={() => { if (canvas.run) setSelectedRun(canvas.run); setView('runs'); }} />
             <div className="canvas-context">
               <span><Workflow size={13} /> {graph.nodes.length} {graph.nodes.length === 1 ? 'node' : 'nodes'} <i /> {edgeCount} {edgeCount === 1 ? 'connection' : 'connections'}</span>
-              <button className="canvas-add" onClick={() => openPalette('nodes')}><Plus size={14} /> Add node</button>
+              <div className="canvas-context-actions">
+                <CanvasFocusToggle mode={mode} focusCanvas={focusCanvas} onToggle={() => setFocusCanvas((current) => !current)} />
+                <button className="canvas-add" onClick={() => openPalette('nodes')}><Plus size={14} /> Add node</button>
+              </div>
             </div>
             {mode === 'pro' ? (
               <div className="canvas-toolstrip" role="toolbar" aria-label="Canvas layout">
@@ -1545,6 +1712,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
                 <button className="icon-button small" disabled={!selectedNodeIds.length} onClick={groupSelection} title="Group selection" aria-label="Group selection"><Frame size={14} /></button>
                 <button className="icon-button small" onClick={addNote} title="Add note" aria-label="Add note"><StickyNote size={14} /></button>
                 <button className="icon-button small" disabled={!selectedNodeIds.length} onClick={saveSelection} title="Save selection" aria-label="Save selection"><BookmarkPlus size={14} /></button>
+                <button className="command-button small" disabled={!selectedNodeIds.length} onClick={() => {
+                  setPresetName(selectedNodeIds.length === 1 ? selectedNodeIds[0] : 'Saved group');
+                  presetDialog.current?.showModal();
+                }} title="Save selected nodes as a reusable preset">Save preset</button>
                 <span className="toolbar-divider" />
                 <button className="icon-button small" disabled={!graph.nodes.length} onClick={autoLayout} title="Auto layout" aria-label="Auto layout"><Workflow size={14} /></button>
               </div>
@@ -1563,6 +1734,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               pinnedPreviews={canvas.pins}
               onPinPreview={canvas.pin}
               onUnpinPreview={canvas.unpin}
+              onSaveOutput={saveOutput}
+              onUseOutput={useOutput}
               mode={mode}
               artifactBlob={loadCanvasArtifact}
               inputAssetBlob={(path, contentType) => runtime.inputAssetBlob(path, contentType)}
@@ -1581,6 +1754,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               onDeleteOutputs={removeOutputs}
               onDeleteEditorItems={removeEditorItems}
               onDropNode={(entry, position) => addNode(entry, position)}
+              onDropPreset={(id, position) => { const preset = presets.find((item) => item.id === id); if (preset) addPreset(preset, position); }}
               onDropFiles={(paths, position) => void importDroppedFiles(paths, position)}
               onUnsupportedFileDrop={() => {
                 if (!isNativeDesktop()) {
@@ -1692,6 +1866,29 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {(() => (<>
+      <dialog ref={shareDialog} className="app-sharing-dialog">
+        <div className="dialog-body wide">
+          <div className="dialog-heading"><strong>Share Run as App</strong><button className="icon-button small" onClick={() => shareDialog.current?.close()} aria-label="Close app sharing"><X size={15} /></button></div>
+          <p>Each published version is an immutable snapshot of the graph, its inputs, and App settings. The link exposes those values. Viewers sign in and run on their own paired executor.</p>
+          {!projectPath ? <p>Save this workflow before publishing an app version.</p> : null}
+          <div className="dialog-actions"><button className="command-button" onClick={() => shareDialog.current?.close()}>Close</button>
+            <button className="command-button primary" disabled={!projectPath || shareBusy || !Object.keys(graph.outputs).length} onClick={() => void publishAppVersion()}>Publish new version</button></div>
+          <div className="app-version-list">{appVersions.map((version) => <div className="app-version" key={version.token}>
+            <div><strong>{version.title}</strong><small>{new Date(version.created_at).toLocaleString()}</small></div>
+            <a href={version.url} target="_blank" rel="noreferrer">Open link</a>
+            <button className="command-button" onClick={() => void navigator.clipboard.writeText(new URL(version.url, window.location.origin).href)}>Copy link</button>
+            <button className="command-button" disabled={shareBusy} onClick={() => void revokeAppVersion(version.token)}>Revoke</button>
+          </div>)}</div>
+        </div>
+      </dialog>
+      <dialog ref={presetDialog}>
+        <form method="dialog" className="dialog-body" onSubmit={(event) => { event.preventDefault(); saveReusablePreset(); }}>
+          <div className="dialog-heading"><strong>Save reusable preset</strong><button className="icon-button small" type="button" onClick={() => presetDialog.current?.close()} aria-label="Close preset dialog"><X size={15} /></button></div>
+          <label className="field">Name<input value={presetName} onChange={(event) => setPresetName(event.target.value)} maxLength={80} required /></label>
+          <p>Selected nodes and their internal connections can be reused in another workflow.</p>
+          <div className="dialog-actions"><button className="command-button" type="button" onClick={() => presetDialog.current?.close()}>Cancel</button><button className="command-button primary" type="submit">Save preset</button></div>
+        </form>
+      </dialog>
       <dialog ref={saveDialog}>
         <form method="dialog" className="dialog-body" onSubmit={(event) => {
           event.preventDefault();
@@ -1704,7 +1901,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
         </form>
       </dialog>
 
-      <dialog ref={openDialog}>
+      <dialog ref={openDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>Open workflow</strong><button className="icon-button small" onClick={() => openDialog.current?.close()} title="Close open dialog" aria-label="Close open dialog"><X size={15} /></button></div>
           <div className="project-list">
@@ -1742,7 +1939,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           event.target.value = '';
         }}
       />
-      <dialog ref={templateDialog}>
+      <dialog ref={templateDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>{templateDraft?.graph.name ?? 'Workflow template'}</strong><button className="icon-button small" onClick={() => templateDialog.current?.close()} title="Close template dialog" aria-label="Close template dialog"><X size={15} /></button></div>
           {templateDraft ? <TemplateForm
@@ -1753,7 +1950,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           <div className="dialog-actions"><button className="command-button" onClick={() => templateDialog.current?.close()}>Cancel</button><button className="command-button primary" onClick={applyTemplate}>Create workflow</button></div>
         </div>
       </dialog>
-      <dialog ref={publishDialog}>
+      <dialog ref={publishDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>Publish workflow template</strong><button className="icon-button small" onClick={() => publishDialog.current?.close()} title="Close publish dialog" aria-label="Close publish dialog"><X size={15} /></button></div>
           <label className="field"><span>Template ID</span><input value={publishDraft.template_id} onChange={(event) => setPublishDraft({ ...publishDraft, template_id: event.target.value })} /></label>
@@ -1763,7 +1960,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           <div className="dialog-actions"><button className="command-button" onClick={() => publishDialog.current?.close()}>Cancel</button><button className="command-button primary" onClick={() => void publishTemplate()}>Publish</button></div>
         </div>
       </dialog>
-      <dialog ref={comfyDialog}>
+      <dialog ref={comfyDialog} className="wide-dialog">
         <div className="dialog-body wide">
           <div className="dialog-heading"><strong>Import ComfyUI workflow</strong><button className="icon-button small" onClick={() => comfyDialog.current?.close()} title="Close import dialog" aria-label="Close import dialog"><X size={15} /></button></div>
           <label className="field"><span>Managed model ID</span><input value={comfyModel} onChange={(event) => setComfyModel(event.target.value)} /></label>
@@ -1821,6 +2018,7 @@ function NativeApp() {
   if (settings || !status.onboarding_complete || !status.mere_run.available) {
     return <DesktopSetup
       status={status}
+      tools={<DesktopTools runtime={runtime} status={status} onStatus={setStatus} />}
       settings={settings || status.onboarding_complete}
       saving={saving}
       error={error}
@@ -1846,7 +2044,7 @@ function CloudApp() {
   if (!inStudio) return <CloudLanding />;
   if (session === 'loading') return <main className="cloud-gate"><span /><strong>Checking your sign-in session</strong></main>;
   if (session === 'guest') {
-    return <main className="cloud-gate"><div><Workflow size={24} /><h1>Graph Studio</h1><p>Sign in with Mere World to open your projects and run workflows on connected machines.</p><a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Sign in <ArrowRight size={17} /></a></div></main>;
+    return <main className="cloud-gate"><div><Workflow size={24} /><h1>Graph Studio</h1><p>Sign in with Mere World to open your projects and run workflows on connected machines.</p><a className="cloud-button large" href={`/auth/start?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Sign in <ArrowRight size={17} /></a></div></main>;
   }
   return <ReactFlowProvider><Workspace runtime={runtime} onSignOut={() => window.location.assign('/auth/logout')} /></ReactFlowProvider>;
 }

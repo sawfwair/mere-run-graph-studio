@@ -314,6 +314,30 @@ impl StudioService {
         Ok(json!({ "assets": imported }))
     }
 
+    pub fn import_run_artifact(&self, body: Value) -> StudioResult<Value> {
+        let object = required_map(&body, "run artifact import request")?;
+        let id = required_string(object, "id", None)?;
+        let path = required_string(object, "path", None)?;
+        let source = self.verified_artifact_path(id, path)?;
+        let source_name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| error("artifact name is invalid"))?;
+        let stored_name = portable_file_name(source_name);
+        let batch = Uuid::new_v4().simple().to_string();
+        let destination_root = self.workspace().join("assets").join(&batch);
+        fs::create_dir_all(&destination_root)?;
+        let destination = destination_root.join(&stored_name);
+        let size_bytes = fs::copy(&source, &destination)?;
+        Ok(json!({ "asset": {
+            "name": source_name,
+            "path": format!("assets/{batch}/{stored_name}"),
+            "content_type": content_type_for_path(&destination),
+            "size_bytes": size_bytes,
+        }}))
+    }
+
     pub fn input_asset_bytes(&self, raw_path: &str) -> StudioResult<Vec<u8>> {
         validate_relative_path(raw_path, "input asset")?;
         let workspace = self.workspace().canonicalize()?;

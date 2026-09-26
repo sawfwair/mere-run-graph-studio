@@ -2,6 +2,9 @@
 
 ## Delivered authoring
 
+- output-to-input branching through declared local artifacts or hosted portable asset uploads;
+- a persistent sidecar comparison board and reusable node/group presets;
+- immutable hosted Run as App snapshots with revocable version links;
 - Easy and Pro presentation modes over one non-destructive project model;
 - compact and phone layouts with executor-aware running at every width;
 - command palette, contextual shortcut help, and non-blocking status feedback;
