@@ -9,7 +9,7 @@ violet identifies the authoring origin.
 
 - `web/public/brand/mark.svg` is the canonical standalone mark.
 - `web/public/brand/lockup.svg` is the horizontal product lockup.
-- `src-tauri/icons/app-icon.svg` is the desktop application-icon source.
+- `src-tauri/icons/app-icon-source.png` is the image-generated desktop icon source.
 - `web/public/graph-studio-og.png` is the generated social and README card.
 - `scripts/brand/graph-studio-og.html` is the editable social-card source.
 
@@ -17,7 +17,7 @@ Run `pnpm brand:render` after editing the social-card source. Regenerate the
 desktop platform icon matrix with:
 
 ```sh
-pnpm tauri icon src-tauri/icons/app-icon.svg
+pnpm tauri icon src-tauri/icons/app-icon-source.png
 ```
 
 The Tauri command also emits Android and iOS matrices. This desktop repository

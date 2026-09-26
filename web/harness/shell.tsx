@@ -33,7 +33,7 @@ if (params.get('empty') === '1') {
   set('mere.graph-studio.recovery.v1', JSON.stringify(project));
 }
 
-const mock = createMockRuntime(params.has('example'));
+const mock = createMockRuntime(params.has('example'), params.has('template'));
 const timeline = params.has('live') ? liveRuntime(mock, params.get('live') === 'failed', params.get('live') === 'faults') : mock;
 const runtime = params.has('sharing') ? new SharingRuntime(timeline) : timeline;
 const desktopStatus: DesktopStatus = {

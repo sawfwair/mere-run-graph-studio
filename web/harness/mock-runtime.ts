@@ -20,12 +20,14 @@ export const HARNESS_CATALOG: CatalogEntry[] = [
   { kind: 'dataset.prepare', title: 'Prepare dataset', category: 'dataset', inputs: [{ name: 'source', type: 'asset' }], outputs: [{ name: 'dataset', type: 'json' }] },
 ];
 
-export function createMockRuntime(example = false): StudioRuntime {
+export function createMockRuntime(example = false, templates = false): StudioRuntime {
   const mock: StudioRuntime = {
     executionScope: 'cloud' as const,
     catalog: async () => ok({ nodes: [...HARNESS_CATALOG, ...(example ? [{ kind: 'text.value', title: 'Text value', category: 'text', presentation: { style: 'material', primary_argument: 'value' }, inputs: [{ name: 'value', type: 'string', required: true, multiline: true }], outputs: [{ name: 'text', type: 'string' }] } satisfies CatalogEntry] : [])] }),
     executors: async () => ok({ executors: [{ kind: 'relay', name: 'fleet' }] }),
-    templates: async () => ({ available: false, document: ok({ templates: [] }) }),
+    templates: async () => ({ available: templates, document: ok({ templates: templates ? [
+      { id: 'product-hero', title: 'Product hero', description: 'Create a product image and video.', tags: ['image', 'video'] },
+    ] : [] }) }),
     projects: async () => ({ projects: [] }),
     listRuns: async () => ({ runs: example ? [await nodeFixtureRun()] : [] }),
     inspectRun: async () => { if (example) return nodeFixtureRun(); throw new Error('harness: no runs'); },
@@ -51,7 +53,18 @@ export function createMockRuntime(example = false): StudioRuntime {
     fetchRun: async () => { throw new Error('harness: run unsupported'); },
     retryRun: async () => { throw new Error('harness: run unsupported'); },
     resumeRun: async () => { throw new Error('harness: run unsupported'); },
-    loadTemplate: async () => { throw new Error('harness: templates unsupported'); },
+    loadTemplate: async () => {
+      if (!templates) throw new Error('harness: templates unsupported');
+      return {
+        graph: { ...HARNESS_PROJECT.graph, name: 'Product hero', inputs: {
+          product: { type: 'string' as const, required: true, default: 'Ceramic lamp' },
+          description: { type: 'string' as const, required: true, default: 'Product photograph on a pale green set' },
+        } },
+        inputs: { product: 'Ceramic lamp', description: 'Product photograph on a pale green set' },
+        sidecar: HARNESS_PROJECT.sidecar,
+        document: ok(null),
+      };
+    },
     publishTemplate: async () => { throw new Error('harness: templates unsupported'); },
     inspectComfy: async () => ok(null, 'harness: comfy unsupported'),
     importComfy: async () => { throw new Error('harness: comfy unsupported'); },

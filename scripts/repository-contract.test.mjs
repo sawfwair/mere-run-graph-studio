@@ -94,6 +94,7 @@ test('brand assets have canonical sources and release-safe dimensions', async ()
   const expectedPngDimensions = new Map([
     ['web/public/graph-studio-og.png', [1200, 630]],
     ['web/public/apple-touch-icon.png', [180, 180]],
+    ['src-tauri/icons/app-icon-source.png', [1254, 1254]],
     ['src-tauri/icons/icon.png', [512, 512]],
     ['src-tauri/icons/32x32.png', [32, 32]],
   ]);
@@ -107,7 +108,6 @@ test('brand assets have canonical sources and release-safe dimensions', async ()
   for (const path of [
     'web/public/brand/mark.svg',
     'web/public/brand/lockup.svg',
-    'src-tauri/icons/app-icon.svg',
     'scripts/brand/graph-studio-og.html',
     'scripts/render-brand-assets.mjs',
   ]) assert.ok(await exists(join(root, path)), `${path} is a required brand source`);

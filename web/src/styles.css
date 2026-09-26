@@ -2074,8 +2074,9 @@ dialog {
 }
 dialog[open] { animation: rise-in 160ms ease; }
 dialog::backdrop { background: rgba(5, 6, 9, 0.66); }
+dialog.wide-dialog, dialog.app-sharing-dialog { width: min(660px, calc(100vw - 32px)); }
 .dialog-body { padding: 16px; }
-.dialog-body.wide { width: min(660px, calc(100vw - 32px)); }
+.dialog-body.wide { width: 100%; }
 .dialog-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .dialog-heading strong { font-size: 13.5px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 16px; }
@@ -3027,8 +3028,6 @@ dialog::backdrop { background: rgba(5, 6, 9, 0.66); }
 .saved-preset > button:first-child { flex: 1; min-width: 0; }
 .saved-preset > .icon-button { flex: 0 0 auto; align-self: center; }
 .app-version-list { display: grid; gap: 8px; margin-top: 18px; max-height: 280px; overflow: auto; }
-.app-sharing-dialog { width: min(660px, calc(100vw - 32px)); }
-.app-sharing-dialog .dialog-body.wide { width: 100%; }
 .app-sharing-dialog p { font-size: 13px; line-height: 1.5; color: var(--muted); }
 .app-version { display: flex; align-items: center; gap: 8px; padding: 9px; border: 1px solid #354550; border-radius: 8px; }
 .app-version > div { flex: 1; min-width: 0; }

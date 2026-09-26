@@ -288,10 +288,36 @@ async function verifyAppSharing() {
   console.log('✓ app version publication, desktop/mobile sharing, and revocation');
 }
 
+async function verifyTemplateDialog() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?template=1`, { waitUntil: 'networkidle' });
+  await page.locator('.template-list > button').first().click();
+  const dialog = page.locator('dialog.wide-dialog[open]');
+  await dialog.getByRole('button', { name: 'Create workflow' }).waitFor();
+  for (const width of [1600, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.waitForTimeout(250); // capture after the dialog entrance finishes
+    const layout = await dialog.evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      const field = element.querySelector('.template-form input')?.getBoundingClientRect();
+      return { overflow: element.scrollWidth > element.clientWidth + 1,
+        left: bounds.left, right: bounds.right, fieldLeft: field?.left, fieldRight: field?.right };
+    });
+    if (layout.overflow || layout.left < 0 || layout.right > width ||
+      layout.fieldLeft === undefined || layout.fieldLeft < layout.left ||
+      layout.fieldRight === undefined || layout.fieldRight > layout.right) {
+      throw Error(`Template dialog clips its fields at ${width}px: ${JSON.stringify(layout)}`);
+    }
+    await page.screenshot({ path: resolve(outDir, `template-dialog-${width}.png`) });
+  }
+  console.log('✓ template dialog fields fit at desktop and mobile widths');
+}
+
 await verifyLiveCanvas();
 await verifyLiveRecovery();
 await verifyCreativeLoop();
 await verifyAppSharing();
+await verifyTemplateDialog();
 await verifyNodePromptEditing();
 await verifyInspectorCanvasInteraction();
 await verifyLibraryAndOutline();
@@ -355,4 +381,4 @@ if (browserErrors.length) throw new Error(`Browser errors:\n${browserErrors.join
 
 await browser.close();
 await server.close();
-console.log(`\nWrote ${shots.length + 11} shot(s) to ${outDir}`);
+console.log(`\nWrote ${shots.length + 13} shot(s) to ${outDir}`);
