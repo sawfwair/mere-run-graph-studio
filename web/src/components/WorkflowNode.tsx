@@ -236,7 +236,9 @@ function visibleInputs(entry: CatalogEntry | undefined, value: WorkflowNodeValue
   const names = new Set(splitFieldsForMode(allInputs, mode).primary.map((field) => field.name));
   for (const field of allInputs) {
     const nested = nestedPorts(field, value.arguments[field.name]);
-    if (isGraphReference(value.arguments[field.name]) || nested.some((port) => isGraphReference(port.value))) {
+    if (portTypeKey(field.type) === 'asset'
+      || isGraphReference(value.arguments[field.name])
+      || nested.some((port) => isGraphReference(port.value))) {
       names.add(field.name);
     }
   }

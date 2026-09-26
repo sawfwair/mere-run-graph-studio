@@ -30,6 +30,7 @@ if (params.get('empty') === '1') {
 } else {
   const project = structuredClone(params.has('example') ? NODE_FIXTURE : HARNESS_PROJECT);
   if (params.has('sharing')) project.graph.outputs = { image: { $ref: 'nodes.render.outputs.image' } };
+  if (params.has('video-unwired')) delete project.graph.nodes[1]?.arguments.image;
   set('mere.graph-studio.recovery.v1', JSON.stringify(project));
 }
 

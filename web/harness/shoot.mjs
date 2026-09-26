@@ -313,11 +313,51 @@ async function verifyTemplateDialog() {
   console.log('✓ template dialog fields fit at desktop and mobile widths');
 }
 
+async function verifyVideoImageConnection() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?video-unwired=1`, { waitUntil: 'networkidle' });
+  const source = page.locator('.react-flow__node-workflow[data-id="render"] .react-flow__handle[data-handleid="image"]');
+  const target = page.locator('.react-flow__node-workflow[data-id="clip"] .react-flow__handle[data-handleid="image"]');
+  const endImage = page.locator('.react-flow__node-workflow[data-id="clip"] .react-flow__handle[data-handleid="end_image"]');
+  await source.waitFor();
+  await target.waitFor();
+  await endImage.waitFor();
+  if (await page.locator('.react-flow__edge').count()) throw Error('Video image should start disconnected');
+  const from = await source.boundingBox();
+  const to = await target.boundingBox();
+  if (!from || !to) throw Error('Image connection handles are not visible');
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 1);
+  await page.locator('.react-flow__node-workflow[data-id="clip"] .port-row.wired').filter({ hasText: 'Image' }).waitFor();
+  await page.screenshot({ path: resolve(outDir, 'video-image-connected.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/?video-connected=1`, { waitUntil: 'networkidle' });
+  await page.locator('.react-flow__node-workflow[data-id="clip"] .port-row.wired').filter({ hasText: 'Image' }).waitFor();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) {
+    throw Error('Connected video image overflows the mobile viewport');
+  }
+  const canvas = await page.locator('.graph-canvas-shell').boundingBox();
+  const nodes = await page.locator('.react-flow__node-workflow').evaluateAll((elements) => elements.map((element) => {
+    const { x, y, width, height } = element.getBoundingClientRect();
+    return { x, y, width, height };
+  }));
+  if (!canvas || nodes.some((node) => node.x < canvas.x || node.x + node.width > canvas.x + canvas.width ||
+    node.y < canvas.y || node.y + node.height > canvas.y + canvas.height)) {
+    throw Error('Connected video workflow is not framed on mobile');
+  }
+  await page.screenshot({ path: resolve(outDir, 'video-image-connected-mobile.png') });
+  console.log('✓ optional video image and end image ports appear, image output connects, and mobile layout fits');
+}
+
 await verifyLiveCanvas();
 await verifyLiveRecovery();
 await verifyCreativeLoop();
 await verifyAppSharing();
 await verifyTemplateDialog();
+await verifyVideoImageConnection();
 await verifyNodePromptEditing();
 await verifyInspectorCanvasInteraction();
 await verifyLibraryAndOutline();
@@ -381,4 +421,4 @@ if (browserErrors.length) throw new Error(`Browser errors:\n${browserErrors.join
 
 await browser.close();
 await server.close();
-console.log(`\nWrote ${shots.length + 13} shot(s) to ${outDir}`);
+console.log(`\nWrote ${shots.length + 15} shot(s) to ${outDir}`);
