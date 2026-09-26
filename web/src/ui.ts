@@ -2,7 +2,7 @@ import type { CatalogEntry, CatalogField, FieldType, JsonValue, WorkflowNode } f
 import { isGraphReference, isSecretReference } from './graph';
 
 export type StudioMode = 'easy' | 'pro';
-export type StudioView = 'app' | 'canvas' | 'program' | 'json' | 'prepare' | 'runs' | 'catalog' | 'inspector';
+export type StudioView = 'app' | 'canvas' | 'board' | 'program' | 'json' | 'prepare' | 'runs' | 'catalog' | 'inspector';
 
 const PRO_ONLY_VIEWS = new Set<StudioView>(['program', 'json', 'prepare']);
 

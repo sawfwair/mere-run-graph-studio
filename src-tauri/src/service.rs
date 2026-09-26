@@ -35,6 +35,7 @@ pub struct StudioService {
 
 include!("service_projects.rs");
 include!("service_support.rs");
+include!("service_setup.rs");
 
 include!("service_tools.rs");
 
@@ -44,6 +45,56 @@ include!("service_run_support.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_version_parsing_rejects_unknown_and_orders_numeric_components() {
+        assert_eq!(
+            parse_runtime_version("mere.run 0.50.0"),
+            Some(vec![0, 50, 0])
+        );
+        assert_eq!(parse_runtime_version("0.24.0"), Some(vec![0, 24, 0]));
+        assert!(parse_runtime_version("unversioned").is_none());
+        assert!(parse_runtime_version("mere.run 0.50.0") > parse_runtime_version("0.24.0"));
+    }
+
+    #[test]
+    fn studio_run_records_leave_cli_run_destinations_empty() {
+        let root = tempfile::tempdir().expect("temporary app data");
+        let app_data = root.path().join("app-data");
+        let service = StudioService::new(app_data.clone()).expect("service");
+        let run_directory = service.workspace().join("runs/local-verification-123");
+        let run = StudioRun {
+            id: "123".to_owned(),
+            executor: "local".to_owned(),
+            run_directory: run_directory.clone(),
+            graph_path: root.path().join("workflow.json"),
+            inputs_path: root.path().join("inputs.json"),
+            state: "starting".to_owned(),
+            created_at: now(),
+            updated_at: now(),
+            exit_code: None,
+            result: Value::Null,
+            stderr: String::new(),
+            remote_reference: None,
+            history: Vec::new(),
+        };
+        service.persist_run(&run).expect("persist Studio record");
+        assert!(!run_directory.exists());
+        assert!(
+            service
+                .workspace()
+                .join(".mere-graph-studio/run-records/123.json")
+                .is_file()
+        );
+        let restored = StudioService::new(app_data).expect("restore service");
+        assert_eq!(
+            restored
+                .required_run("123")
+                .expect("restored run")
+                .run_directory,
+            run_directory
+        );
+    }
 
     fn fixture_graph() -> Value {
         json!({
@@ -168,6 +219,62 @@ mod tests {
         assert!(validate_relative_path("workflows/valid", "project").is_ok());
         assert!(validate_artifact_path("../secret").is_err());
         assert!(validate_artifact_path("outputs/image.png").is_ok());
+    }
+
+    #[test]
+    fn reused_run_outputs_are_declared_and_copied_into_independent_assets() {
+        let root = tempfile::tempdir().expect("temporary app data");
+        let service = StudioService::new(root.path().join("app-data")).expect("service");
+        let directory = root.path().join("run");
+        fs::create_dir_all(&directory).expect("run directory");
+        fs::write(directory.join("output.png"), b"finished-image").expect("artifact");
+        fs::write(directory.join("private.txt"), b"private").expect("undeclared file");
+        write_json_atomic(
+            &directory.join("run.json"),
+            &json!({
+                "outputs": [{ "name": "image", "path": "output.png" }]
+            }),
+        )
+        .expect("manifest");
+        let run = StudioRun {
+            id: "fixture".to_owned(),
+            executor: "local".to_owned(),
+            run_directory: directory.clone(),
+            graph_path: directory.join("workflow.json"),
+            inputs_path: directory.join("inputs.json"),
+            state: "finished".to_owned(),
+            created_at: now(),
+            updated_at: now(),
+            exit_code: Some(0),
+            result: Value::Null,
+            stderr: String::new(),
+            remote_reference: None,
+            history: Vec::new(),
+        };
+        service
+            .runs
+            .lock()
+            .expect("runs lock")
+            .insert(run.id.clone(), run);
+        assert!(
+            service
+                .import_run_artifact(json!({ "id": "fixture", "path": "private.txt" }))
+                .is_err()
+        );
+        assert!(
+            service
+                .import_run_artifact(json!({ "id": "fixture", "path": "../private.txt" }))
+                .is_err()
+        );
+        let imported = service
+            .import_run_artifact(json!({ "id": "fixture", "path": "output.png" }))
+            .expect("reuse output");
+        let asset_path = imported["asset"]["path"].as_str().expect("asset path");
+        fs::remove_file(directory.join("output.png")).expect("remove original");
+        assert_eq!(
+            service.input_asset_bytes(asset_path).expect("copied asset"),
+            b"finished-image"
+        );
     }
 
     #[test]

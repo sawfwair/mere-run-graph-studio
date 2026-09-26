@@ -16,9 +16,11 @@ export interface GraphFleetCapabilities {
   };
 }
 
-interface AssetManifest {
+export interface AssetManifest {
   schema_version: 1;
-  groups: [];
+  groups: Array<{ name: string; kind: 'asset'; entries: Array<{
+    path: string; digest: string; size_bytes: number; content_type: string;
+  }> }>;
 }
 
 export interface GraphSubmission {
@@ -123,16 +125,27 @@ function materializeInputs(graph: WorkflowGraph, inputs: JsonObject): JsonObject
   return materialized;
 }
 
-function assertCloudAssetsAbsent(graph: WorkflowGraph, inputs: JsonObject, entries: CatalogEntry[]): void {
+function assertCloudAssetsAbsent(graph: WorkflowGraph, inputs: JsonObject, entries: CatalogEntry[], assets: AssetManifest): void {
   for (const [name, definition] of Object.entries(graph.inputs)) {
-    if (definition.type.startsWith('asset') && inputs[name] !== undefined) {
+    if (definition.type.startsWith('asset') && inputs[name] !== undefined
+      && !assets.groups.some((group) => group.name === name && group.kind === definition.type)) {
       throw new Error(`Cloud asset upload is required for graph input “${name}”; remove it or use the desktop Studio for this run.`);
     }
   }
-  for (const node of graph.nodes) {
+  assertNodeAssetsAreReferences(graph.nodes, entries);
+}
+
+function isAssetReference(value: JsonValue): boolean {
+  return !!value && typeof value === 'object' && !Array.isArray(value) && typeof value.$ref === 'string';
+}
+
+function assertNodeAssetsAreReferences(nodes: WorkflowNode[], entries: CatalogEntry[]): void {
+  for (const node of nodes) {
     const entry = catalogEntry(node, entries);
     for (const field of entry?.inputs ?? []) {
-      if (field.type.startsWith('asset') && node.arguments[field.name] !== undefined) {
+      const argument = node.arguments[field.name];
+      if (field.type.startsWith('asset') && argument !== undefined
+        && !isAssetReference(argument)) {
         throw new Error(`Cloud asset upload is required for ${node.id}.${field.name}; remove it or use the desktop Studio for this run.`);
       }
     }
@@ -188,24 +201,25 @@ export async function buildGraphSubmission(
   graph: WorkflowGraph,
   inputs: JsonObject,
   capabilities: GraphFleetCapabilities,
+  assets: AssetManifest = { schema_version: 1, groups: [] },
 ): Promise<GraphSubmission> {
   const entries = capabilities.catalog?.nodes ?? [];
   if (!graph.nodes.length) throw new Error('Add at least one node before running this workflow.');
   const missingKinds = graph.nodes.filter((node) => !catalogEntry(node, entries));
   if (missingKinds.length) throw new Error(`Fleet catalog does not provide: ${missingKinds.map((node) => node.kind).join(', ')}`);
-  assertCloudAssetsAbsent(graph, inputs, entries);
+  assertCloudAssetsAbsent(graph, inputs, entries, assets);
   const [sourceGraphFingerprint, sourceInputFingerprint] = await Promise.all([
     sha256Canonical(graph),
     sha256Canonical(inputs),
   ]);
   const materializedGraph = materializeGraph(graph, entries);
   const materializedInputs = materializeInputs(graph, inputs);
+  for (const group of assets.groups) materializedInputs[group.name] = `asset://${group.name}`;
   const selectedEntries = materializedGraph.nodes.map((node) => catalogEntry(node, entries)!);
   const providers = requiredProviders(materializedGraph, capabilities);
   const acceleratorBackends = requiredAccelerators(selectedEntries, capabilities);
   const modelIds = requiredModels(materializedGraph, selectedEntries);
   const secretNames = requiredSecrets(materializedGraph, capabilities);
-  const assets: AssetManifest = { schema_version: 1, groups: [] };
   const jobId = crypto.randomUUID().toLowerCase();
   return {
     job: {

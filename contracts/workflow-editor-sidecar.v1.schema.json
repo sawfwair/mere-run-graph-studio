@@ -134,6 +134,28 @@
         }
       }
     },
+    "board": {
+      "type": "array",
+      "maxItems": 100,
+      "description": "Saved references to verified run artifacts for comparison. Never contains media bytes or secret values.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "node_id", "run_id", "path", "name", "created_at"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "node_id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$"},
+          "run_id": {"type": "string", "minLength": 1},
+          "path": {"type": "string", "minLength": 1},
+          "name": {"type": "string", "minLength": 1},
+          "created_at": {"type": "string", "format": "date-time"},
+          "content_type": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+          "model": {"type": "string"},
+          "seed": {"type": "string"}
+        }
+      }
+    },
     "app": {
       "type": "object",
       "additionalProperties": false,

@@ -242,6 +242,7 @@ export interface StudioRuntime {
   resumeRun(id: string): Promise<StudioRun>;
   artifactBlob(id: string, path: string, contentType?: string): Promise<Blob>;
   importAssets(paths: string[]): Promise<{ assets: ImportedAsset[] }>;
+  importRunArtifact(id: string, path: string): Promise<ImportedAsset>;
   inputAssetBlob(path: string, contentType?: string): Promise<Blob>;
   templates(): Promise<{ available: boolean; document: CommandDocument<{ templates: TemplateEntry[] }> | null }>;
   loadTemplate(templateId: string): Promise<{
@@ -287,6 +288,26 @@ export class NativeRuntime implements StudioRuntime {
 
   configure(request: DesktopConfiguration): Promise<DesktopStatus> {
     return invokeDecoded('studio_configure', decodeDesktopStatus, { request });
+  }
+
+  discoverTools(): Promise<DesktopStatus> {
+    return invokeDecoded('studio_discover_tools', decodeDesktopStatus);
+  }
+
+  openRuntimeDownloads(): Promise<JsonObject> {
+    return invokeDecoded('studio_open_runtime_downloads', decodeJsonObject);
+  }
+
+  plugins(): Promise<CommandDocument<JsonValue>> {
+    return invokeDecoded('studio_plugins', decodeJsonCommand);
+  }
+
+  setupPlugin(id: string, confirmed: boolean): Promise<CommandDocument<JsonValue>> {
+    return invokeDecoded('studio_setup_plugin', decodeJsonCommand, { request: { id, confirmed } });
+  }
+
+  verifyLocal(): Promise<JsonObject> {
+    return invokeDecoded('studio_verify_local', decodeJsonObject);
   }
 
   catalog(): Promise<CommandDocument<{ nodes: CatalogEntry[] }>> {
@@ -394,6 +415,13 @@ export class NativeRuntime implements StudioRuntime {
 
   importAssets(paths: string[]): Promise<{ assets: ImportedAsset[] }> {
     return invokeDecoded('studio_import_assets', decodeImportedAssets, { request: { paths } });
+  }
+
+  importRunArtifact(id: string, path: string): Promise<ImportedAsset> {
+    return invokeDecoded('studio_import_run_artifact', (value, location) => {
+      const response = recordValue(value, location);
+      return decodeImportedAsset(response.asset, `${location}.asset`);
+    }, { request: { id, path } });
   }
 
   async inputAssetBlob(path: string, contentType?: string): Promise<Blob> {

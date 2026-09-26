@@ -76,4 +76,26 @@ describe('cloud graph contract', () => {
     expect(submission.job.source_graph_fingerprint).toBe(await sha256Canonical(fixture));
     expect(submission.job.source_input_fingerprint).toBe(await sha256Canonical({ prompt: 'A lighthouse at dawn' }));
   });
+
+  it('binds a reused output to a verified portable asset group', async () => {
+    const workflow: WorkflowGraph = { schema_version: 1, kind: 'mere.run/workflow-graph', name: 'Refine',
+      inputs: { source: { type: 'asset', required: true } },
+      nodes: [{ id: 'refine', kind: 'image.crop', provider: 'mere-image-compose',
+        arguments: { image: { $ref: 'inputs.source' } } }],
+      outputs: { image: { $ref: 'nodes.refine.outputs.image' } } };
+    const source = 'run-artifact://00000000-0000-4000-8000-000000000000/image.png';
+    const assets = { schema_version: 1 as const, groups: [{ name: 'source', kind: 'asset' as const,
+      entries: [{ path: 'image.png', digest: 'a'.repeat(64), size_bytes: 100, content_type: 'image/png' }] }] };
+    const submission = await buildGraphSubmission(workflow, { source }, {
+      worker_version: '0.23.0', accelerator_backend: 'metal', installed_model_ids: [], providers: [{
+        id: 'mere-image-compose', version: '0.1.0', catalog_sha256: 'b'.repeat(64), node_kinds: ['image.crop'],
+      }], catalog: { nodes: [{ kind: 'image.crop', title: 'Crop', provider: {
+        id: 'mere-image-compose', version: '0.1.0' }, inputs: [{ name: 'image', type: 'asset', required: true }],
+        outputs: [{ name: 'image', type: 'asset' }] }] },
+    }, assets);
+    expect(submission.inputs.source).toBe('asset://source');
+    expect(submission.assets).toEqual(assets);
+    expect(submission.job.source_input_fingerprint).toBe(await sha256Canonical({ source }));
+    expect(submission.job.input_fingerprint).toBe(await sha256Canonical({ inputs: { source: 'asset://source' }, assets }));
+  });
 });

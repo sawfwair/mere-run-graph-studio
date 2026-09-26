@@ -6,6 +6,7 @@ import type {
   CommandDocument,
   EditorAppConfig,
   EditorAppField,
+  EditorBoardItem,
   EditorGroupState,
   EditorNodeState,
   EditorNoteState,
@@ -247,6 +248,7 @@ function decodeCatalogRequirements(value: unknown, path: string): CatalogEntry['
   const requirements = recordValue(value, path);
   return {
     accelerator_backends: optionalStringArray(requirements.accelerator_backends, `${path}.accelerator_backends`),
+    network_access: requirements.network_access === undefined ? undefined : booleanValue(requirements.network_access, `${path}.network_access`),
     model_ids: optionalStringArray(requirements.model_ids, `${path}.model_ids`),
   };
 }
@@ -447,6 +449,22 @@ function decodeAppConfig(value: unknown, path: string): EditorAppConfig {
   };
 }
 
+function decodeBoardItem(value: unknown, path: string): EditorBoardItem {
+  const source = recordValue(value, path);
+  return {
+    id: stringValue(source.id, `${path}.id`),
+    node_id: stringValue(source.node_id, `${path}.node_id`),
+    run_id: stringValue(source.run_id, `${path}.run_id`),
+    path: stringValue(source.path, `${path}.path`),
+    name: stringValue(source.name, `${path}.name`),
+    created_at: stringValue(source.created_at, `${path}.created_at`),
+    content_type: optionalString(source.content_type, `${path}.content_type`),
+    sha256: optionalString(source.sha256, `${path}.sha256`),
+    model: optionalString(source.model, `${path}.model`),
+    seed: optionalString(source.seed, `${path}.seed`),
+  };
+}
+
 export function decodeEditorSidecar(value: unknown, path = 'editor sidecar'): EditorSidecar {
   const source = recordValue(value, path);
   if (source.schema_version !== 1) return invalid(`${path}.schema_version`, '1');
@@ -476,6 +494,7 @@ export function decodeEditorSidecar(value: unknown, path = 'editor sidecar'): Ed
       `${path}.promotions`,
     ),
     app: optionalDecoded(source.app, decodeAppConfig, `${path}.app`),
+    board: optionalDecoded(source.board, (item, itemPath) => decodeArray(item, decodeBoardItem, itemPath), `${path}.board`),
   };
 }
 

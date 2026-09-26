@@ -65,6 +65,11 @@ macro_rules! value_command {
 }
 
 value_command!(studio_catalog, catalog);
+value_command!(studio_discover_tools, discover_tools);
+value_command!(studio_open_runtime_downloads, open_runtime_downloads);
+value_command!(studio_plugins, plugins);
+value_command!(studio_setup_plugin, setup_plugin, value);
+value_command!(studio_verify_local, verify_local);
 value_command!(studio_executors, executors);
 value_command!(studio_projects, projects);
 value_command!(studio_load_project, load_project, text);
@@ -72,6 +77,7 @@ value_command!(studio_save_project, save_project, value);
 value_command!(studio_export_project, export_project, value);
 value_command!(studio_import_project, import_project, value);
 value_command!(studio_import_assets, import_assets, value);
+value_command!(studio_import_run_artifact, import_run_artifact, value);
 value_command!(studio_check, check, value);
 value_command!(studio_compare_preflight, compare_preflight, value);
 value_command!(studio_compile_program, compile_program, value);
