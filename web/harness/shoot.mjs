@@ -93,6 +93,9 @@ async function verifyInspectorCanvasInteraction() {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(base, { waitUntil: 'networkidle' });
   await page.waitForSelector('.app-shell', { timeout: 15000 });
+  if (await page.locator('.library-panel:visible, .library-rail:visible, .inspector-panel:visible, .inspector-rail:visible').count()) {
+    throw new Error('Easy canvas should open without persistent side panels');
+  }
 
   const firstNode = page.locator('.react-flow__node-workflow').first();
   await firstNode.click();
@@ -114,6 +117,7 @@ async function verifyInspectorCanvasInteraction() {
 
 async function verifyLibraryAndOutline() {
   await page.goto(base, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Show panels' }).click();
   await page.locator('.outline-step').first().click();
   await page.locator('.inspector-heading').filter({ hasText: 'Generate image' }).waitFor();
   await page.getByRole('button', { name: 'Back to workflow' }).click();
@@ -136,12 +140,11 @@ async function verifyMobileGraphFraming() {
   await page.goto(base, { waitUntil: 'networkidle' });
   await page.locator('.react-flow__node-workflow').first().waitFor();
   const canvas = await page.locator('.graph-canvas-shell').boundingBox();
-  const nodeBoxes = await page.locator('.react-flow__node-workflow').evaluateAll((elements) => elements.map((element) => {
-    const { x, y, width, height } = element.getBoundingClientRect();
-    return { x, y, width, height };
-  }));
-  if (!canvas || nodeBoxes.some((node) => node.x < canvas.x || node.x + node.width > canvas.x + canvas.width || node.y < canvas.y || node.y + node.height > canvas.y + canvas.height)) {
-    throw new Error('Mobile opening must frame every workflow node');
+  const firstNode = await page.locator('.react-flow__node-workflow').first().boundingBox();
+  if (!canvas || !firstNode || firstNode.width < 180 || firstNode.x < canvas.x ||
+    firstNode.x + firstNode.width > canvas.x + canvas.width || firstNode.y < canvas.y ||
+    firstNode.y + Math.min(firstNode.height, 150) > canvas.y + canvas.height) {
+    throw new Error('Mobile opening must show the first node at a readable size');
   }
   await page.getByRole('tab', { name: 'Library', exact: true }).click();
   await page.getByRole('textbox', { name: 'Search nodes' }).fill('upscale');
@@ -194,6 +197,7 @@ async function verifyLiveCanvas() {
   await page.locator('.canvas-run-summary strong').filter({ hasText: 'Failed' }).waitFor();
   if (!await render.locator('.canvas-run-preview img').isVisible()) throw Error('Downstream failure must preserve upstream media');
   await render.getByRole('button', { name: 'Pin output', exact: true }).click();
+  await render.locator('.creative-node-settings summary').click();
   await page.getByRole('textbox', { name: 'Prompt for render', exact: true }).fill('A blue car at dusk');
   await render.locator('.output-caption').filter({ hasText: 'Previous run' }).waitFor();
   await page.getByRole('button', { name: 'Run', exact: true }).click();
@@ -291,6 +295,7 @@ async function verifyAppSharing() {
 async function verifyTemplateDialog() {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(`${base}/?template=1`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Show panels' }).click();
   await page.locator('.template-list > button').first().click();
   const dialog = page.locator('dialog.wide-dialog[open]');
   await dialog.getByRole('button', { name: 'Create workflow' }).waitFor();
@@ -340,13 +345,10 @@ async function verifyVideoImageConnection() {
     throw Error('Connected video image overflows the mobile viewport');
   }
   const canvas = await page.locator('.graph-canvas-shell').boundingBox();
-  const nodes = await page.locator('.react-flow__node-workflow').evaluateAll((elements) => elements.map((element) => {
-    const { x, y, width, height } = element.getBoundingClientRect();
-    return { x, y, width, height };
-  }));
-  if (!canvas || nodes.some((node) => node.x < canvas.x || node.x + node.width > canvas.x + canvas.width ||
-    node.y < canvas.y || node.y + node.height > canvas.y + canvas.height)) {
-    throw Error('Connected video workflow is not framed on mobile');
+  const firstNode = await page.locator('.react-flow__node-workflow').first().boundingBox();
+  if (!canvas || !firstNode || firstNode.width < 180 || firstNode.x < canvas.x ||
+    firstNode.x + firstNode.width > canvas.x + canvas.width) {
+    throw Error('Connected video workflow does not open at a readable size on mobile');
   }
   await page.screenshot({ path: resolve(outDir, 'video-image-connected-mobile.png') });
   console.log('✓ optional video image and end image ports appear, image output connects, and mobile layout fits');
