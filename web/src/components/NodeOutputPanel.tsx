@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Columns2, Expand, FileText, Pin, PinOff, X } from 'lucide-react';
+import { BookmarkPlus, ChevronLeft, ChevronRight, Columns2, Expand, FileText, Pin, PinOff, Undo2, X } from 'lucide-react';
 import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { OutputContext } from '../canvas-execution';
 
@@ -79,7 +79,22 @@ function previewCaption(preview: NodeRunPreview): string {
   if (preview.previous) return 'Previous run';
   return preview.intermediate ? 'Intermediate preview' : 'Run output';
 }
-function CanvasRunPreview({ preview, artifactBlob, expanded = false }: { preview: NodeRunPreview; artifactBlob?: ArtifactLoader; expanded?: boolean }) {
+function CreativeOutputTools({ preview, item, onSave, onUse }: {
+  preview: NodeRunPreview; item: NodeRunPreviewItem;
+  onSave?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
+  onUse?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
+}) {
+  if (!item.artifact || preview.intermediate || preview.state !== 'finished') return null;
+  return <div className="node-output-tools">
+    {onSave ? <button onClick={() => onSave(preview, item)}><BookmarkPlus size={11} /> Save to board</button> : null}
+    {onUse ? <button onClick={() => onUse(preview, item)}><Undo2 size={11} /> Use as input</button> : null}
+  </div>;
+}
+function CanvasRunPreview({ preview, artifactBlob, expanded = false, onSave, onUse }: {
+  preview: NodeRunPreview; artifactBlob?: ArtifactLoader; expanded?: boolean;
+  onSave?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
+  onUse?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
+}) {
   const [index, setIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const selectedIndex = Math.min(index, preview.items.length - 1);
@@ -97,6 +112,7 @@ function CanvasRunPreview({ preview, artifactBlob, expanded = false }: { preview
       <GalleryControls index={selectedIndex} count={preview.items.length} name={item.outputName ?? 'Output'} onIndex={setIndex} onExpand={expanded ? undefined : () => setOpen(true)} />
     </div>
     <OutputMetadata context={preview.context} runId={preview.runId} />
+    <CreativeOutputTools preview={preview} item={item} onSave={onSave} onUse={onUse} />
     {open ? <OutputDialog title="Generated outputs" onClose={() => setOpen(false)}><div className="expanded-output"><CanvasRunPreview preview={preview} artifactBlob={artifactBlob} expanded /></div></OutputDialog> : null}
   </>;
 }
@@ -115,14 +131,16 @@ function Comparison({ pinned, preview, load, onClose }: { pinned?: NodeRunPrevie
     <section><h3>Current output</h3><CanvasRunPreview preview={preview} artifactBlob={load} expanded /></section>
   </div></OutputDialog>;
 }
-export function NodeOutputPanel({ preview, pinned, artifactBlob, onPin, onUnpin }: {
+export function NodeOutputPanel({ preview, pinned, artifactBlob, onPin, onUnpin, onSave, onUse }: {
   preview?: NodeRunPreview; pinned?: NodeRunPreview; artifactBlob?: ArtifactLoader;
   onPin?: () => void; onUnpin?: () => void;
+  onSave?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
+  onUse?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
 }): ReactElement | null {
   const [comparing, setComparing] = useState(false);
   if (!preview && !pinned) return null;
   return <div className="node-output-panel nodrag nopan nowheel">
-    {preview ? <CanvasRunPreview preview={preview} artifactBlob={artifactBlob} /> : <div className="pinned-waiting"><Pin size={13} /> Pinned output saved for comparison</div>}
+    {preview ? <CanvasRunPreview preview={preview} artifactBlob={artifactBlob} onSave={onSave} onUse={onUse} /> : <div className="pinned-waiting"><Pin size={13} /> Pinned output saved for comparison</div>}
     <OutputTools preview={preview} pinned={pinned} onPin={onPin} onUnpin={onUnpin} onCompare={() => setComparing(true)} />
     {comparing ? <Comparison pinned={pinned} preview={preview} load={artifactBlob} onClose={() => setComparing(false)} /> : null}
   </div>;

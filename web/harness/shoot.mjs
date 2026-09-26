@@ -232,8 +232,66 @@ async function verifyLiveRecovery() {
   console.log('✓ disconnected updates reconnect and failed cancellation can be retried');
 }
 
+async function verifyCreativeLoop() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?live=failed&mode=pro`, { waitUntil: 'networkidle' });
+  const render = page.locator('.react-flow__node-workflow[data-id="render"]');
+  for (let index = 0; index < 2; index++) {
+    await page.getByRole('button', { name: 'Run', exact: true }).click();
+    await render.getByRole('progressbar').waitFor();
+    await page.locator('.canvas-run-summary strong').filter({ hasText: 'Failed' }).waitFor();
+    await render.getByRole('button', { name: 'Save to board', exact: true }).click();
+  }
+  await page.getByRole('tab', { name: /^Board/ }).click();
+  await page.locator('.board-card').nth(1).waitFor();
+  for (let index = 0; index < 2; index++) await page.locator('.board-card').nth(index).getByRole('button', { name: 'Compare', exact: true }).click();
+  await page.locator('.board-grid.comparing').waitFor();
+  await page.locator('.board-card img').nth(1).waitFor();
+  await page.screenshot({ path: resolve(outDir, 'creative-board.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  if (await page.locator('.board-view').evaluate((element) => element.scrollWidth > element.clientWidth + 1)) throw Error('Mobile board must not overflow');
+  await page.screenshot({ path: resolve(outDir, 'creative-board-mobile.png') });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.locator('.board-card').first().getByRole('button', { name: 'Use as input', exact: true }).click();
+  await page.locator('.react-flow__node-graph-input').waitFor();
+  await render.locator('.workflow-node-header').click();
+  await page.getByRole('button', { name: 'Save preset', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.locator('input').fill('Hero image');
+  await dialog.getByRole('button', { name: 'Save preset', exact: true }).click();
+  await page.locator('.library-panel').getByRole('tab', { name: 'Saved', exact: true }).click();
+  await page.locator('.saved-preset').first().waitFor();
+  await page.screenshot({ path: resolve(outDir, 'creative-presets.png') });
+  const before = await page.locator('.react-flow__node-workflow').count();
+  await page.locator('.saved-preset').first().getByRole('button', { name: /Hero image.*nodes/ }).click();
+  await page.waitForFunction((count) => document.querySelectorAll('.react-flow__node-workflow').length === count + 1, before);
+  console.log('✓ persistent board, desktop/mobile comparison, output reuse, and preset insertion');
+}
+
+async function verifyAppSharing() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?sharing=1`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Save workflow', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  await page.getByRole('button', { name: 'Share app', exact: true }).click();
+  await page.getByRole('button', { name: 'Publish new version', exact: true }).click();
+  await page.locator('.app-version').waitFor();
+  await page.screenshot({ path: resolve(outDir, 'creative-app-sharing.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const dialog = page.getByRole('dialog');
+  if (await dialog.evaluate((element) => element.scrollWidth > element.clientWidth + 1)) throw Error('Mobile sharing dialog must not overflow');
+  await page.screenshot({ path: resolve(outDir, 'creative-app-sharing-mobile.png') });
+  await page.getByRole('button', { name: 'Revoke', exact: true }).click();
+  await page.locator('.app-version').waitFor({ state: 'detached' });
+  console.log('✓ app version publication, desktop/mobile sharing, and revocation');
+}
+
 await verifyLiveCanvas();
 await verifyLiveRecovery();
+await verifyCreativeLoop();
+await verifyAppSharing();
 await verifyNodePromptEditing();
 await verifyInspectorCanvasInteraction();
 await verifyLibraryAndOutline();

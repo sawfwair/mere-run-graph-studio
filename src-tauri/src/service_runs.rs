@@ -289,6 +289,10 @@ impl StudioService {
     }
 
     pub fn artifact_bytes(&self, id: &str, raw_path: &str) -> StudioResult<Vec<u8>> {
+        Ok(fs::read(self.verified_artifact_path(id, raw_path)?)?)
+    }
+
+    fn verified_artifact_path(&self, id: &str, raw_path: &str) -> StudioResult<PathBuf> {
         let run = self.required_run(id)?;
         validate_artifact_path(raw_path)?;
         let manifest = read_optional_json(&run.run_directory.join("run.json"))?;
@@ -305,7 +309,7 @@ impl StudioService {
         if !canonical_path.starts_with(&canonical_run) || !canonical_path.is_file() {
             return Err(error("artifact is unavailable"));
         }
-        Ok(fs::read(canonical_path)?)
+        Ok(canonical_path)
     }
 
     fn execute_run(self: Arc<Self>, id: &str, resume: bool) {

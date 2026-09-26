@@ -7,6 +7,8 @@ import {
   GripVertical,
   Image,
   LayoutTemplate,
+  Bookmark,
+  Trash2,
   Music,
   PanelLeftClose,
   PanelLeftOpen,
@@ -21,13 +23,15 @@ import {
 
 import { catalogKey, providerId } from '../graph';
 import { categoryKey, categoryTitle, friendlyType, type CategoryKey, type StudioMode } from '../ui';
-import { NODE_DRAG_TYPE } from './GraphCanvas';
+import { NODE_DRAG_TYPE, PRESET_DRAG_TYPE } from './GraphCanvas';
+import type { SavedPreset } from '../presets';
 import type { CatalogEntry, TemplateEntry, WorkflowGraph } from '../types';
 
 interface LibraryProps {
   catalog: CatalogEntry[];
   graph: WorkflowGraph;
   templates: TemplateEntry[];
+  presets: SavedPreset[];
   workflowToolsAvailable: boolean;
   mode: StudioMode;
   collapsed: boolean;
@@ -38,6 +42,8 @@ interface LibraryProps {
   onLoadTemplate: (templateId: string) => void;
   onImportComfy: () => void;
   onPublishTemplate: () => void;
+  onAddPreset: (preset: SavedPreset) => void;
+  onRemovePreset: (id: string) => void;
 }
 
 const categoryIcons = {
@@ -52,12 +58,37 @@ const categoryIcons = {
 } satisfies Record<CategoryKey, typeof Box>;
 const categoryOrder: CategoryKey[] = ['values', 'text', 'image', 'video', 'audio', 'model', 'dataset', 'other'];
 
-type LibraryTab = 'nodes' | 'inputs' | 'templates';
+type LibraryTab = 'nodes' | 'inputs' | 'templates' | 'saved';
+
+function libraryTabs(mode: StudioMode): { id: LibraryTab; label: string }[] {
+  const first: LibraryTab[] = mode === 'easy' ? ['templates', 'nodes', 'inputs'] : ['nodes', 'inputs', 'templates'];
+  return [...first, 'saved' as const].map((id) => ({ id, label: id.charAt(0).toUpperCase() + id.slice(1) }));
+}
+
+function SavedPresets({ presets, onAddPreset, onRemovePreset }: Pick<LibraryProps, 'presets' | 'onAddPreset' | 'onRemovePreset'>): ReactElement {
+  return <div className="library-body">
+    <div className="panel-heading"><strong>Saved presets</strong><small>{presets.length}</small></div>
+    <div className="template-list">
+      {presets.map((preset) => <div className="saved-preset" key={preset.id}>
+        <button draggable onDragStart={(event) => {
+          event.dataTransfer.setData(PRESET_DRAG_TYPE, preset.id);
+          event.dataTransfer.effectAllowed = 'copy';
+        }} onClick={() => onAddPreset(preset)} title="Add or drag this preset onto the canvas">
+          <span className="template-icon"><Bookmark size={15} /></span>
+          <span className="catalog-copy"><strong>{preset.title}</strong><small>{preset.nodes.length} nodes</small></span>
+        </button>
+        <button className="icon-button small" onClick={() => onRemovePreset(preset.id)} title={`Remove ${preset.title}`} aria-label={`Remove ${preset.title}`}><Trash2 size={13} /></button>
+      </div>)}
+      {!presets.length ? <div className="empty-state">Select nodes on the canvas, then choose Save preset to reuse them in other workflows.</div> : null}
+    </div>
+  </div>;
+}
 
 export function Library({
   catalog,
   graph,
   templates,
+  presets,
   workflowToolsAvailable,
   mode,
   collapsed,
@@ -68,6 +99,8 @@ export function Library({
   onLoadTemplate,
   onImportComfy,
   onPublishTemplate,
+  onAddPreset,
+  onRemovePreset,
 }: LibraryProps): ReactElement {
   const [tab, setTab] = useState<LibraryTab>('nodes');
   const [query, setQuery] = useState('');
@@ -113,19 +146,8 @@ export function Library({
     }, new Map<CategoryKey, CatalogEntry[]>());
   }, [catalog, query]);
 
-  const tabIcons: Record<LibraryTab, typeof Box> = { templates: LayoutTemplate, nodes: Box, inputs: FileInput };
-  const tabs: { id: LibraryTab; label: string }[] =
-    mode === 'easy'
-      ? [
-          { id: 'templates', label: 'Templates' },
-          { id: 'nodes', label: 'Nodes' },
-          { id: 'inputs', label: 'Inputs' },
-        ]
-      : [
-          { id: 'nodes', label: 'Nodes' },
-          { id: 'inputs', label: 'Inputs' },
-          { id: 'templates', label: 'Templates' },
-        ];
+  const tabIcons: Record<LibraryTab, typeof Box> = { templates: LayoutTemplate, nodes: Box, inputs: FileInput, saved: Bookmark };
+  const tabs = libraryTabs(mode);
 
   if (collapsed) {
     return (
@@ -262,6 +284,8 @@ export function Library({
             ) : null}
           </div>
         </div>
+      ) : tab === 'saved' ? (
+        <SavedPresets presets={presets} onAddPreset={onAddPreset} onRemovePreset={onRemovePreset} />
       ) : (
         <div className="library-body">
           <div className="panel-heading">

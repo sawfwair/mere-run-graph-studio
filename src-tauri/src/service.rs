@@ -171,6 +171,62 @@ mod tests {
     }
 
     #[test]
+    fn reused_run_outputs_are_declared_and_copied_into_independent_assets() {
+        let root = tempfile::tempdir().expect("temporary app data");
+        let service = StudioService::new(root.path().join("app-data")).expect("service");
+        let directory = root.path().join("run");
+        fs::create_dir_all(&directory).expect("run directory");
+        fs::write(directory.join("output.png"), b"finished-image").expect("artifact");
+        fs::write(directory.join("private.txt"), b"private").expect("undeclared file");
+        write_json_atomic(
+            &directory.join("run.json"),
+            &json!({
+                "outputs": [{ "name": "image", "path": "output.png" }]
+            }),
+        )
+        .expect("manifest");
+        let run = StudioRun {
+            id: "fixture".to_owned(),
+            executor: "local".to_owned(),
+            run_directory: directory.clone(),
+            graph_path: directory.join("workflow.json"),
+            inputs_path: directory.join("inputs.json"),
+            state: "finished".to_owned(),
+            created_at: now(),
+            updated_at: now(),
+            exit_code: Some(0),
+            result: Value::Null,
+            stderr: String::new(),
+            remote_reference: None,
+            history: Vec::new(),
+        };
+        service
+            .runs
+            .lock()
+            .expect("runs lock")
+            .insert(run.id.clone(), run);
+        assert!(
+            service
+                .import_run_artifact(json!({ "id": "fixture", "path": "private.txt" }))
+                .is_err()
+        );
+        assert!(
+            service
+                .import_run_artifact(json!({ "id": "fixture", "path": "../private.txt" }))
+                .is_err()
+        );
+        let imported = service
+            .import_run_artifact(json!({ "id": "fixture", "path": "output.png" }))
+            .expect("reuse output");
+        let asset_path = imported["asset"]["path"].as_str().expect("asset path");
+        fs::remove_file(directory.join("output.png")).expect("remove original");
+        assert_eq!(
+            service.input_asset_bytes(asset_path).expect("copied asset"),
+            b"finished-image"
+        );
+    }
+
+    #[test]
     fn discovers_nested_remote_references_and_states() {
         let document =
             json!({ "nested": [{ "reference": "relay://fleet/job-1", "state": "queued" }] });

@@ -46,6 +46,9 @@ versioned, but UI and integration details may still change between releases.
   graph input per file while the workflow keeps named references;
 - source-correlated scalar and media galleries on producing canvas nodes, with
   variant navigation and full-screen inspection;
+- output-to-input reuse, a persistent comparison board, and saved node/group
+  presets; see [Creative workflows](docs/creative-loop.md);
+- immutable hosted Run as App versions with share links and per-version revocation;
 - sidecar-only groups, notes, saved selections, alignment, and automatic layout;
 - reusable workflow programs and modules with map and branch visualization;
 - core and plugin-provider node catalogs;

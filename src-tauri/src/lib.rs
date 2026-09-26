@@ -33,6 +33,7 @@ pub fn run() {
             studio_export_project,
             studio_import_project,
             studio_import_assets,
+            studio_import_run_artifact,
             studio_check,
             studio_compare_preflight,
             studio_compile_program,

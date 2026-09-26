@@ -72,6 +72,7 @@ value_command!(studio_save_project, save_project, value);
 value_command!(studio_export_project, export_project, value);
 value_command!(studio_import_project, import_project, value);
 value_command!(studio_import_assets, import_assets, value);
+value_command!(studio_import_run_artifact, import_run_artifact, value);
 value_command!(studio_check, check, value);
 value_command!(studio_compare_preflight, compare_preflight, value);
 value_command!(studio_compile_program, compile_program, value);

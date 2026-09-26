@@ -33,9 +33,10 @@ other clients, materializes omitted seeds, computes canonical SHA-256 graph and
 input fingerprints, asks Relay for a non-persisting placement preflight, and
 uses Relay's two-phase create/asset/commit API.
 
-The current browser asset picker is intentionally not implicit: an asset-bound
-argument is blocked before submission until the user selects an upload. The
-desktop lane remains available for filesystem-bound workflows. Plain image and
+Hosted Studio can reuse a completed run artifact as an asset input through
+**Use as input**. It creates a content-addressed asset manifest and uploads only
+the hashes Relay requests before committing the job. Browser filesystem paths
+and literal asset arguments require the desktop lane. Plain image and
 video generation, provider-free typed graphs, project persistence, preflight,
 submission, events, cancellation, retry, manifests, and artifacts use the
 hosted path.
@@ -59,6 +60,11 @@ a later run. **Compare outputs** shows both results and their recorded prompt,
 model, seed, and run ID. Settings that were not captured are labeled accordingly.
 Pins last for the current session and clear when you open another workflow.
 Editing the workflow or inputs labels existing output **Previous run**.
+
+The **Board** tab stores completed artifact references in the project sidecar
+for comparison across sessions. Hosted **Share app** publishes immutable,
+revocable snapshots. See [Creative workflows](creative-loop.md) for usage and
+the publication boundary.
 
 ## Deployment order
 

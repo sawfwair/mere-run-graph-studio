@@ -4,6 +4,7 @@ import {
   AlignVerticalJustifyCenter,
   AppWindow,
   BookmarkPlus,
+  Columns2,
   Check,
   ArrowRight,
   CloudCog,
@@ -33,6 +34,7 @@ import {
 import { ReactFlowProvider } from '@xyflow/react';
 
 import { AppView, type AppVariation } from './components/AppView';
+import { BoardView } from './components/BoardView';
 import { ModelInstallSheet } from './components/ModelInstallSheet';
 import { buildVariationInputs, variationValues, type VariationCandidate } from './app-mode';
 import { buildModelVariants, executorsWithModel, missingModels, parseInstalledModels, parseInstalledModelsByExecutor } from './models';
@@ -79,9 +81,12 @@ import {
   uniqueId,
 } from './graph';
 import { loadRecoveredDocument, useDocumentHistory } from './history';
-import { CloudRuntime } from './cloud-runtime';
+import { CloudRuntime, type SharedAppVersion } from './cloud-runtime';
 import { captureRunSource } from './canvas-execution';
 import { useCanvasRun } from './use-canvas-run';
+import { removeBoardOutput, saveBoardOutput } from './creative-board';
+import { capturePreset, insertPreset, loadPresetLibrary, storePresetLibrary, type SavedPreset } from './presets';
+import type { NodeRunPreview, NodeRunPreviewItem } from './run-preview';
 import { CanvasRunBar } from './components/CanvasRunBar';
 import { decodeJsonObject, decodeWorkflowGraph, parseJsonValue, recordValue } from './decode';
 import {
@@ -96,6 +101,7 @@ import type {
   CatalogEntry,
   CommandDocument,
   Diagnostic,
+  EditorBoardItem,
   EditorSidecar,
   JsonObject,
   JsonValue,
@@ -237,6 +243,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     dirty,
   } = useDocumentHistory(initialDocument, recoveredDocument === null);
   const { graph, inputs, sidecar, program } = document;
+  const boardItems = useMemo(() => sidecar.board ?? [], [sidecar.board]);
   const setGraph = useCallback((next: WorkflowGraph) => {
     commitDocument((current) => ({ ...current, graph: next }));
   }, [commitDocument]);
@@ -299,6 +306,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   }[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateEntry[]>([]);
+  const [presets, setPresets] = useState<SavedPreset[]>(loadPresetLibrary);
+  const [presetName, setPresetName] = useState('');
+  const [appVersions, setAppVersions] = useState<SharedAppVersion[]>([]);
+  const [shareBusy, setShareBusy] = useState(false);
   const [templateDraft, setTemplateDraft] = useState<{
     id: string;
     graph: WorkflowGraph;
@@ -316,6 +327,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const comfyDialog = useRef<HTMLDialogElement>(null);
   const templateDialog = useRef<HTMLDialogElement>(null);
   const publishDialog = useRef<HTMLDialogElement>(null);
+  const presetDialog = useRef<HTMLDialogElement>(null);
+  const shareDialog = useRef<HTMLDialogElement>(null);
+  const loadedShare = useRef<string | null>(null);
+
   const comfyFile = useRef<HTMLInputElement>(null);
   const projectFile = useRef<HTMLInputElement>(null);
 
@@ -343,6 +358,22 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setDrawerOpen(true);
     pushToast('error', title, message);
   }, [pushToast]);
+
+  useEffect(() => {
+    if (!(runtime instanceof CloudRuntime)) return;
+    const share = new URLSearchParams(window.location.search).get('share');
+    if (!share || loadedShare.current === share) return;
+    const match = /^([0-9a-f]{64})\.([0-9a-f-]{36})$/.exec(share);
+    if (!match) return;
+    loadedShare.current = share;
+    void runtime.loadSharedApp(match[1], match[2]).then((snapshot) => {
+      canvas.reset();
+      replaceDocument(snapshot, true);
+      setProjectPath(null);
+      setView('app');
+      pushToast('success', 'Shared app opened', 'Run it on your own paired executor, or save a copy to edit.');
+    }).catch((error: unknown) => showError('Could not open shared app', error));
+  }, [runtime, canvas, replaceDocument, pushToast, showError]);
 
   const refreshRuns = useCallback(async () => {
     try {
@@ -652,6 +683,74 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     }
   }, [commitDocument, graph, inputs, pushToast, runtime, showError, sidecar]);
 
+  const saveOutput = (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => {
+    try {
+      const result = saveBoardOutput(sidecar, nodeId, preview, item);
+      if (result.sidecar !== sidecar) setSidecar(result.sidecar);
+      pushToast('success', 'Saved to comparison board', result.item.name);
+    } catch (error) { showError('Could not save output', error); }
+  };
+
+  const applyBoardOutput = async (item: EditorBoardItem) => {
+    setBusy('Importing output');
+    try {
+      const asset = await runtime.importRunArtifact(item.run_id, item.path);
+      const name = uniqueId(asset.name.replace(/\.[^.]+$/, ''), Object.keys(graph.inputs));
+      const origin = sidecar.nodes[item.node_id] ?? { x: 80, y: 80 };
+      commitDocument((current) => ({
+        ...current,
+        graph: { ...current.graph, inputs: { ...current.graph.inputs, [name]: {
+          type: 'asset', required: true,
+        } } },
+        inputs: { ...current.inputs, [name]: asset.path },
+        sidecar: { ...current.sidecar, inputs: { ...current.sidecar.inputs,
+          [name]: { x: origin.x + 380, y: origin.y + 60 },
+        } },
+      }));
+      selectInput(name);
+      setView('canvas');
+      pushToast('success', 'Output added as input', 'Connect it to a new node to refine or branch.');
+    } catch (error) { showError('Could not use output', error); }
+    finally { setBusy(null); }
+  };
+
+  const useOutput = (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => {
+    try {
+      const saved = saveBoardOutput(sidecar, nodeId, preview, item);
+      if (saved.sidecar !== sidecar) setSidecar(saved.sidecar);
+      void applyBoardOutput(saved.item);
+    } catch (error) { showError('Could not use output', error); }
+  };
+
+  const saveReusablePreset = () => {
+    try {
+      const preset = capturePreset(graph, sidecar, selectedNodeIds, presetName);
+      const next = [preset, ...presets];
+      storePresetLibrary(next);
+      setPresets(next);
+      presetDialog.current?.close();
+      pushToast('success', 'Preset saved', preset.title);
+    } catch (error) { showError('Could not save preset', error); }
+  };
+
+  const addPreset = (preset: SavedPreset, position?: CanvasPosition) => {
+    try {
+      const result = insertPreset(graph, sidecar, preset, position ?? { x: 120, y: 120 });
+      commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
+      selectNodes(result.nodeIds);
+      setView('canvas');
+      pushToast('success', 'Preset added', preset.title);
+    } catch (error) { showError('Could not add preset', error); }
+  };
+
+  const removePreset = (id: string) => {
+    try {
+      const next = presets.filter((item) => item.id !== id);
+      storePresetLibrary(next);
+      setPresets(next);
+    } catch (error) { showError('Could not remove preset', error); }
+  };
+
   const exposeOutput = (nodeId: string, outputName: string) => {
     const result = addGraphOutput(graph, sidecar, nodeId, outputName);
     commitDocument((current) => ({ ...current, graph: result.graph, sidecar: result.sidecar }));
@@ -811,6 +910,39 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     } finally {
       setBusy(null);
     }
+  };
+
+  const openShareDialog = async () => {
+    if (!(runtime instanceof CloudRuntime)) { await exportProject(); return; }
+    shareDialog.current?.showModal();
+    if (!projectPath) return;
+    try { setAppVersions(await runtime.listAppVersions(projectPath)); }
+    catch (error) { showError('Could not load app versions', error); }
+  };
+
+  const publishAppVersion = async () => {
+    if (!(runtime instanceof CloudRuntime) || !projectPath) return;
+    setShareBusy(true);
+    try {
+      const current = { graph, inputs, sidecar, program };
+      await runtime.saveProject({ path: projectPath, ...current });
+      markSaved(current);
+      const version = await runtime.publishAppVersion(projectPath);
+      setAppVersions((previous) => [version, ...previous]);
+      pushToast('success', 'App version published', 'Anyone with its link can view this snapshot.');
+    } catch (error) { showError('App publication failed', error); }
+    finally { setShareBusy(false); }
+  };
+
+  const revokeAppVersion = async (token: string) => {
+    if (!(runtime instanceof CloudRuntime)) return;
+    setShareBusy(true);
+    try {
+      await runtime.revokeAppVersion(token);
+      setAppVersions((previous) => previous.filter((version) => version.token !== token));
+      pushToast('success', 'App link revoked');
+    } catch (error) { showError('Could not revoke app link', error); }
+    finally { setShareBusy(false); }
   };
 
   const importProject = async (file: File) => {
@@ -1369,6 +1501,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       catalog={catalog}
       graph={graph}
       templates={templates}
+      presets={presets}
       workflowToolsAvailable={workflowToolsAvailable}
       mode={mode}
       collapsed={leftCollapsed}
@@ -1379,6 +1512,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       onLoadTemplate={(templateId) => void loadTemplate(templateId)}
       onImportComfy={() => comfyFile.current?.click()}
       onPublishTemplate={openPublishTemplate}
+      onAddPreset={(preset) => addPreset(preset)}
+      onRemovePreset={removePreset}
     />
   );
 
@@ -1483,6 +1618,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
           <div className="segmented" role="tablist">
             <button role="tab" aria-selected={view === 'app'} title="Run as app" className={viewTabClass(view, 'app', 'app-tab')} onClick={() => setView('app')}><AppWindow size={14} /> App</button>
             <button role="tab" aria-selected={view === 'canvas'} title="Canvas (1)" className={viewTabClass(view, 'canvas')} onClick={() => setView('canvas')}><Workflow size={14} /> Canvas</button>
+            <button role="tab" aria-selected={view === 'board'} title="Comparison board" className={viewTabClass(view, 'board')} onClick={() => setView('board')}><Columns2 size={14} /> Board{sidecar.board?.length ? ` ${sidecar.board.length}` : ''}</button>
             {mode === 'pro' ? (
               <button role="tab" aria-selected={view === 'program'} title="Program (2)" className={viewTabClass(view, 'program')} onClick={() => setView('program')}><Frame size={14} /> Program</button>
             ) : null}
@@ -1517,7 +1653,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             onRun={() => void runGraph({ keepView: true })}
             onRunVariations={(candidate, count) => void runVariations(candidate, count)}
             onClearVariations={clearVariations}
-            onShare={() => void exportProject()}
+            onShare={() => void openShareDialog()}
             onEditGraph={() => setView('canvas')}
             onRunOnExecutor={(execId) => void runGraph({ keepView: true, executor: execId })}
             canInstallModels={canInstallModels}
@@ -1525,6 +1661,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             artifactBlob={(id, path, contentType) => runtime.artifactBlob(id, path, contentType)}
             inputAssetBlob={(path, contentType) => runtime.inputAssetBlob(path, contentType)}
           />
+        ) : view === 'board' ? (
+          <BoardView items={boardItems} artifactBlob={loadCanvasArtifact}
+            onRemove={(id) => setSidecar(removeBoardOutput(sidecar, id))}
+            onUse={(item) => void applyBoardOutput(item)} />
         ) : view === 'canvas' ? ((() => (
           <div className="canvas-view">
             <CanvasRunBar run={canvas.run} previous={!canvas.matches} error={canvas.streamError}
@@ -1545,6 +1685,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
                 <button className="icon-button small" disabled={!selectedNodeIds.length} onClick={groupSelection} title="Group selection" aria-label="Group selection"><Frame size={14} /></button>
                 <button className="icon-button small" onClick={addNote} title="Add note" aria-label="Add note"><StickyNote size={14} /></button>
                 <button className="icon-button small" disabled={!selectedNodeIds.length} onClick={saveSelection} title="Save selection" aria-label="Save selection"><BookmarkPlus size={14} /></button>
+                <button className="command-button small" disabled={!selectedNodeIds.length} onClick={() => {
+                  setPresetName(selectedNodeIds.length === 1 ? selectedNodeIds[0] : 'Saved group');
+                  presetDialog.current?.showModal();
+                }} title="Save selected nodes as a reusable preset">Save preset</button>
                 <span className="toolbar-divider" />
                 <button className="icon-button small" disabled={!graph.nodes.length} onClick={autoLayout} title="Auto layout" aria-label="Auto layout"><Workflow size={14} /></button>
               </div>
@@ -1563,6 +1707,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               pinnedPreviews={canvas.pins}
               onPinPreview={canvas.pin}
               onUnpinPreview={canvas.unpin}
+              onSaveOutput={saveOutput}
+              onUseOutput={useOutput}
               mode={mode}
               artifactBlob={loadCanvasArtifact}
               inputAssetBlob={(path, contentType) => runtime.inputAssetBlob(path, contentType)}
@@ -1581,6 +1727,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               onDeleteOutputs={removeOutputs}
               onDeleteEditorItems={removeEditorItems}
               onDropNode={(entry, position) => addNode(entry, position)}
+              onDropPreset={(id, position) => { const preset = presets.find((item) => item.id === id); if (preset) addPreset(preset, position); }}
               onDropFiles={(paths, position) => void importDroppedFiles(paths, position)}
               onUnsupportedFileDrop={() => {
                 if (!isNativeDesktop()) {
@@ -1692,6 +1839,29 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {(() => (<>
+      <dialog ref={shareDialog} className="app-sharing-dialog">
+        <div className="dialog-body wide">
+          <div className="dialog-heading"><strong>Share Run as App</strong><button className="icon-button small" onClick={() => shareDialog.current?.close()} aria-label="Close app sharing"><X size={15} /></button></div>
+          <p>Each published version is an immutable snapshot of the graph, its inputs, and App settings. The link exposes those values. Viewers sign in and run on their own paired executor.</p>
+          {!projectPath ? <p>Save this workflow before publishing an app version.</p> : null}
+          <div className="dialog-actions"><button className="command-button" onClick={() => shareDialog.current?.close()}>Close</button>
+            <button className="command-button primary" disabled={!projectPath || shareBusy || !Object.keys(graph.outputs).length} onClick={() => void publishAppVersion()}>Publish new version</button></div>
+          <div className="app-version-list">{appVersions.map((version) => <div className="app-version" key={version.token}>
+            <div><strong>{version.title}</strong><small>{new Date(version.created_at).toLocaleString()}</small></div>
+            <a href={version.url} target="_blank" rel="noreferrer">Open link</a>
+            <button className="command-button" onClick={() => void navigator.clipboard.writeText(new URL(version.url, window.location.origin).href)}>Copy link</button>
+            <button className="command-button" disabled={shareBusy} onClick={() => void revokeAppVersion(version.token)}>Revoke</button>
+          </div>)}</div>
+        </div>
+      </dialog>
+      <dialog ref={presetDialog}>
+        <form method="dialog" className="dialog-body" onSubmit={(event) => { event.preventDefault(); saveReusablePreset(); }}>
+          <div className="dialog-heading"><strong>Save reusable preset</strong><button className="icon-button small" type="button" onClick={() => presetDialog.current?.close()} aria-label="Close preset dialog"><X size={15} /></button></div>
+          <label className="field">Name<input value={presetName} onChange={(event) => setPresetName(event.target.value)} maxLength={80} required /></label>
+          <p>Selected nodes and their internal connections can be reused in another workflow.</p>
+          <div className="dialog-actions"><button className="command-button" type="button" onClick={() => presetDialog.current?.close()}>Cancel</button><button className="command-button primary" type="submit">Save preset</button></div>
+        </form>
+      </dialog>
       <dialog ref={saveDialog}>
         <form method="dialog" className="dialog-body" onSubmit={(event) => {
           event.preventDefault();
@@ -1846,7 +2016,7 @@ function CloudApp() {
   if (!inStudio) return <CloudLanding />;
   if (session === 'loading') return <main className="cloud-gate"><span /><strong>Checking your sign-in session</strong></main>;
   if (session === 'guest') {
-    return <main className="cloud-gate"><div><Workflow size={24} /><h1>Graph Studio</h1><p>Sign in with Mere World to open your projects and run workflows on connected machines.</p><a className="cloud-button large" href="/auth/start?return_to=%2Fapp">Sign in <ArrowRight size={17} /></a></div></main>;
+    return <main className="cloud-gate"><div><Workflow size={24} /><h1>Graph Studio</h1><p>Sign in with Mere World to open your projects and run workflows on connected machines.</p><a className="cloud-button large" href={`/auth/start?return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`}>Sign in <ArrowRight size={17} /></a></div></main>;
   }
   return <ReactFlowProvider><Workspace runtime={runtime} onSignOut={() => window.location.assign('/auth/logout')} /></ReactFlowProvider>;
 }
