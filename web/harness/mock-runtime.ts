@@ -38,6 +38,7 @@ export function createMockRuntime(example = false): StudioRuntime {
     artifactBlob: async () => new Blob([]),
     inputAssetBlob: async () => new Blob([]),
     importAssets: async () => ({ assets: [] }),
+    importRunArtifact: async () => ({ name: 'output.png', path: 'assets/harness/output.png', content_type: 'image/png', size_bytes: 100 }),
     saveProject: async () => ({ status: 'ok', path: 'untitled' }),
     loadProject: async () => { throw new Error('harness: no projects'); },
     exportProject: async (project) => ({ contract_version: 'mere.run/graph-studio-project.v1', ...project }),

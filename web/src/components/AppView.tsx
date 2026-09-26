@@ -179,7 +179,7 @@ function AppHeader({ title, tagline, fieldCount, showSettings, onToggleSettings,
       <div className="app-head-actions">
         <button className="icon-button small" title="App settings" aria-label="App settings" aria-pressed={showSettings} onClick={onToggleSettings}><Settings2 size={15} /></button>
         <button className="icon-button small" title="Edit the graph" aria-label="Edit the graph" onClick={onEditGraph}><Pencil size={15} /></button>
-        <button className="icon-button small" title="Export the app as a project file" aria-label="Export app" onClick={onShare}><Share2 size={15} /></button>
+        <button className="icon-button small" title="Share app" aria-label="Share app" onClick={onShare}><Share2 size={15} /></button>
       </div>
     </header>
   );

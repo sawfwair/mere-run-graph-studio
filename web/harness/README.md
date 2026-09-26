@@ -52,3 +52,9 @@ pnpm harness:shoot hero=mode=pro  # custom "name=query" shots
 
 The `live-runtime.ts` fixture emits simulated events and SVG outputs. It does not
 start inference or contact Relay. Pinned comparisons last for the editor session.
+
+The creative workflow checks save two completed outputs to the board, compare
+them at desktop and phone widths, reuse a result as an input, and insert a saved
+preset. `?sharing=1` uses `SharingRuntime` to exercise publication and revocation
+without credentials or hosted writes. These fixtures verify interaction and
+layout; they do not prove inference, authentication, or deployed Relay behavior.

@@ -20,8 +20,11 @@ interface ProjectSummary {
 }
 
 const PROJECT_PREFIX = 'project:';
+const SHARE_PREFIX = 'shared-app:';
+const SHARE_INDEX_PREFIX = 'shared-app-index:';
 const MAX_PROJECT_BYTES = 5 * 1024 * 1024;
 const PATH_PATTERN = /^[a-z0-9][a-z0-9/_-]{0,159}$/;
+const SHARE_TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const CREDENTIAL_KEY_PATTERN = /^(access[_-]?token|refresh[_-]?token|id[_-]?token|api[_-]?key|password|secret[_-]?value)$/i;
 
 function projectKey(path: string, document: string): string {
@@ -52,7 +55,77 @@ function validateProject(value: unknown): ValidatedProject {
   return { path: project.path, graph, inputs, sidecar, program: project.program };
 }
 
+function publicationProblem(graph: JsonObject, inputs: JsonObject, sidecar: JsonObject): string | null {
+  if (!isRecord(graph.outputs) || !Object.keys(graph.outputs).length) return 'Expose at least one graph output before publishing';
+  if (containsCredentialValue({ graph, inputs, sidecar })) return 'App contains credential values';
+  const hasAssets = Object.values(graph.inputs ?? {}).some((definition) => isRecord(definition)
+    && typeof definition.type === 'string' && definition.type.startsWith('asset'));
+  return hasAssets ? 'Hosted apps with asset inputs are not supported yet' : null;
+}
+
+function publicAppSidecar(sidecar: JsonObject): JsonObject {
+  return { schema_version: 1, kind: 'mere.run/workflow-editor', viewport: { x: 0, y: 0, zoom: 1 },
+    nodes: {}, ...(isRecord(sidecar.app) ? { app: sidecar.app } : {}) };
+}
+
+function projectTitle(graph: JsonObject, path: string, sidecar: JsonObject): string {
+  const app = isRecord(sidecar.app) ? sidecar.app : {};
+  if (typeof app.title === 'string' && app.title.trim()) return app.title.trim();
+  return typeof graph.name === 'string' ? graph.name : path;
+}
+
 export class StudioAccount extends DurableObject<Env> {
+  private async publishApp(request: Request): Promise<Response> {
+    let body: JsonObject;
+    try { body = recordValue(await request.json(), 'App publication'); }
+    catch { return Response.json({ error: 'Invalid app publication' }, { status: 400 }); }
+    const path = body.path;
+    if (typeof path !== 'string' || !PATH_PATTERN.test(path) || path.includes('//')) return Response.json({ error: 'Invalid project path' }, { status: 400 });
+    const [graph, inputs, sidecar] = await Promise.all([
+      this.ctx.storage.get<JsonObject>(projectKey(path, 'graph')),
+      this.ctx.storage.get<JsonObject>(projectKey(path, 'inputs')),
+      this.ctx.storage.get<JsonObject>(projectKey(path, 'sidecar')),
+    ]);
+    if (!graph || !inputs || !sidecar) return Response.json({ error: 'Save the project before publishing an app' }, { status: 404 });
+    const problem = publicationProblem(graph, inputs, sidecar);
+    if (problem) return Response.json({ error: problem }, { status: 400 });
+    const token = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+    const version = { token, path, title: projectTitle(graph, path, sidecar),
+      created_at: createdAt };
+    const snapshot = { contract_version: 'mere.run/graph-studio-shared-app.v1', ...version,
+      graph, inputs, sidecar: publicAppSidecar(sidecar) };
+    await this.ctx.storage.put({ [`${SHARE_PREFIX}${token}`]: snapshot,
+      [`${SHARE_INDEX_PREFIX}${path}:${token}`]: version });
+    return Response.json(version, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  private async listAppVersions(url: URL): Promise<Response> {
+    const path = url.searchParams.get('path') ?? '';
+    if (!PATH_PATTERN.test(path)) return Response.json({ error: 'Invalid project path' }, { status: 400 });
+    const values = await this.ctx.storage.list<JsonObject>({ prefix: `${SHARE_INDEX_PREFIX}${path}:` });
+    const versions = [...values.values()].sort((left, right) => String(right.created_at).localeCompare(String(left.created_at)));
+    return Response.json({ versions }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
+  private async sharedApp(url: URL): Promise<Response> {
+    const token = url.searchParams.get('token') ?? '';
+    if (!SHARE_TOKEN_PATTERN.test(token)) return Response.json({ error: 'Invalid share token' }, { status: 400 });
+    const snapshot = await this.ctx.storage.get(`${SHARE_PREFIX}${token}`);
+    return snapshot
+      ? Response.json(snapshot, { headers: { 'Cache-Control': 'no-store' } })
+      : Response.json({ error: 'Shared app not found' }, { status: 404 });
+  }
+
+  private async revokeAppVersion(url: URL): Promise<Response> {
+    const token = url.searchParams.get('token') ?? '';
+    if (!SHARE_TOKEN_PATTERN.test(token)) return Response.json({ error: 'Invalid share token' }, { status: 400 });
+    const snapshot = await this.ctx.storage.get<JsonObject>(`${SHARE_PREFIX}${token}`);
+    if (!snapshot || typeof snapshot.path !== 'string') return Response.json({ error: 'Shared app not found' }, { status: 404 });
+    await this.ctx.storage.delete([`${SHARE_PREFIX}${token}`, `${SHARE_INDEX_PREFIX}${snapshot.path}:${token}`]);
+    return new Response(null, { status: 204 });
+  }
+
   private async listProjects(): Promise<Response> {
     const values = await this.ctx.storage.list<ProjectSummary>({ prefix: PROJECT_PREFIX });
     const projects = [...values.entries()]
@@ -115,10 +188,16 @@ export class StudioAccount extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    if (url.pathname === '/projects' && request.method === 'GET') return this.listProjects();
-    if (url.pathname === '/project' && request.method === 'GET') return this.loadProject(url);
-    if (url.pathname === '/project' && request.method === 'PUT') return this.saveProject(request);
-    if (url.pathname === '/project' && request.method === 'DELETE') return this.deleteProject(url);
-    return new Response('Not Found', { status: 404 });
+    switch (`${request.method} ${url.pathname}`) {
+      case 'POST /app-version': return this.publishApp(request);
+      case 'DELETE /app-version': return this.revokeAppVersion(url);
+      case 'GET /app-versions': return this.listAppVersions(url);
+      case 'GET /shared-app': return this.sharedApp(url);
+      case 'GET /projects': return this.listProjects();
+      case 'GET /project': return this.loadProject(url);
+      case 'PUT /project': return this.saveProject(request);
+      case 'DELETE /project': return this.deleteProject(url);
+      default: return new Response('Not Found', { status: 404 });
+    }
   }
 }

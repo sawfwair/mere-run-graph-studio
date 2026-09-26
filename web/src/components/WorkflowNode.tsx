@@ -12,7 +12,7 @@ import {
 import { parseJsonValue } from '../decode';
 import { candidateModels, modelFieldFor } from '../models';
 import { argumentSummaries, categoryKey, categoryTitle, friendlyLabel, friendlyType, portTypeKey, splitFieldsForMode, textValue, type StudioMode } from '../ui';
-import type { NodeRunPreview } from '../run-preview';
+import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { NodeExecutionState } from '../canvas-execution';
 import { NodeExecution } from './CanvasRunBar';
 import { NodeOutputPanel } from './NodeOutputPanel';
@@ -36,6 +36,8 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   pinnedPreview?: NodeRunPreview;
   onPinPreview?: () => void;
   onUnpinPreview?: () => void;
+  onSaveOutput?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
+  onUseOutput?: (preview: NodeRunPreview, item: NodeRunPreviewItem) => void;
   artifactBlob?: (runId: string, path: string, contentType?: string) => Promise<Blob>;
   availableModels?: string[];
   onRaceModels?: (nodeId: string, models: string[]) => void;
@@ -432,7 +434,7 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
           <MaterialEditor entry={entry} value={value} onArgumentChange={onArgumentChange} />
         </div>
       ) : null}
-      <NodeOutputPanel preview={preview} pinned={data.pinnedPreview} artifactBlob={artifactBlob} onPin={data.onPinPreview} onUnpin={data.onUnpinPreview} />
+      <NodeOutputPanel preview={preview} pinned={data.pinnedPreview} artifactBlob={artifactBlob} onPin={data.onPinPreview} onUnpin={data.onUnpinPreview} onSave={data.onSaveOutput} onUse={data.onUseOutput} />
       <NodePorts inputs={inputs} outputs={outputs} value={value} mode={mode} />
       {hiddenInputCount ? <div className="node-hidden-inputs">{hiddenInputsLabel(hiddenInputCount)}</div> : null}
       <NodeSummaries value={value} entry={entry} mode={mode} />

@@ -3,6 +3,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 
 import { CloudLanding } from '../src/components/CloudLanding';
 import { liveRuntime } from './live-runtime';
+import { SharingRuntime } from './sharing-runtime';
 import { NODE_FIXTURE } from './node-fixture';
 import { Workspace } from '../src/App';
 import { createMockRuntime, HARNESS_PROJECT } from './mock-runtime';
@@ -24,11 +25,14 @@ set('mere-studio-right-collapsed', params.get('right') === '1' ? '1' : '0');
 if (params.get('empty') === '1') {
   try { window.localStorage.removeItem('mere.graph-studio.recovery.v1'); } catch { /* ignore */ }
 } else {
-  set('mere.graph-studio.recovery.v1', JSON.stringify(params.has('example') ? NODE_FIXTURE : HARNESS_PROJECT));
+  const project = structuredClone(params.has('example') ? NODE_FIXTURE : HARNESS_PROJECT);
+  if (params.has('sharing')) project.graph.outputs = { image: { $ref: 'nodes.render.outputs.image' } };
+  set('mere.graph-studio.recovery.v1', JSON.stringify(project));
 }
 
 const mock = createMockRuntime(params.has('example'));
-const runtime = params.has('live') ? liveRuntime(mock, params.get('live') === 'failed', params.get('live') === 'faults') : mock;
+const timeline = params.has('live') ? liveRuntime(mock, params.get('live') === 'failed', params.get('live') === 'faults') : mock;
+const runtime = params.has('sharing') ? new SharingRuntime(timeline) : timeline;
 
 createRoot(document.getElementById('root')!).render(
   <ReactFlowProvider>

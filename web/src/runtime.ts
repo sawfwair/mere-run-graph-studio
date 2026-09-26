@@ -242,6 +242,7 @@ export interface StudioRuntime {
   resumeRun(id: string): Promise<StudioRun>;
   artifactBlob(id: string, path: string, contentType?: string): Promise<Blob>;
   importAssets(paths: string[]): Promise<{ assets: ImportedAsset[] }>;
+  importRunArtifact(id: string, path: string): Promise<ImportedAsset>;
   inputAssetBlob(path: string, contentType?: string): Promise<Blob>;
   templates(): Promise<{ available: boolean; document: CommandDocument<{ templates: TemplateEntry[] }> | null }>;
   loadTemplate(templateId: string): Promise<{
@@ -394,6 +395,13 @@ export class NativeRuntime implements StudioRuntime {
 
   importAssets(paths: string[]): Promise<{ assets: ImportedAsset[] }> {
     return invokeDecoded('studio_import_assets', decodeImportedAssets, { request: { paths } });
+  }
+
+  importRunArtifact(id: string, path: string): Promise<ImportedAsset> {
+    return invokeDecoded('studio_import_run_artifact', (value, location) => {
+      const response = recordValue(value, location);
+      return decodeImportedAsset(response.asset, `${location}.asset`);
+    }, { request: { id, path } });
   }
 
   async inputAssetBlob(path: string, contentType?: string): Promise<Blob> {

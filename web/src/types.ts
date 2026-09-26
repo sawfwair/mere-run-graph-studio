@@ -189,6 +189,20 @@ export interface EditorAppConfig {
   fields?: Record<string, EditorAppField>;
 }
 
+/** A durable reference to an authoritative run output, never an embedded asset. */
+export interface EditorBoardItem {
+  id: string;
+  node_id: string;
+  run_id: string;
+  path: string;
+  name: string;
+  created_at: string;
+  content_type?: string;
+  sha256?: string;
+  model?: string;
+  seed?: string;
+}
+
 export interface EditorPromotionState {
   consumer_id: string;
   argument_name: string;
@@ -207,6 +221,7 @@ export interface EditorSidecar {
   selection_sets?: Record<string, EditorSelectionSet>;
   promotions?: Record<string, EditorPromotionState>;
   app?: EditorAppConfig;
+  board?: EditorBoardItem[];
 }
 
 export interface StudioDocument {
