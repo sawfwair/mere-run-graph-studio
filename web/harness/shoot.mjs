@@ -297,6 +297,26 @@ await verifyInspectorCanvasInteraction();
 await verifyLibraryAndOutline();
 await verifyMobileGraphFraming();
 
+for (const { name, query, width } of [
+  { name: 'desktop-setup', query: 'setup=1', width: 1600 },
+  { name: 'desktop-setup-mobile', query: 'setup=1', width: 390 },
+  { name: 'desktop-setup-missing', query: 'setup=missing', width: 1600 },
+  { name: 'desktop-setup-missing-mobile', query: 'setup=missing', width: 390 },
+]) {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto(`${base}/?${query}`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Find tools' }).waitFor();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
+  if (overflow) throw Error(`${name} overflows horizontally`);
+  if (query === 'setup=1') {
+    await page.getByText('Optional plugins').click();
+    await page.getByRole('button', { name: 'Review installation' }).last().click();
+    await page.getByText('Install signed image compose bundle').waitFor();
+  }
+  await page.screenshot({ path: resolve(outDir, `${name}.png`), fullPage: true });
+  console.log(`✓ ${name}.png`);
+}
+
 for (const { name, query, viewport, view } of shots) {
   await page.setViewportSize(viewport);
   await page.goto(`${base}/${query ? `?${query}` : ''}`, { waitUntil: 'networkidle' });
@@ -335,4 +355,4 @@ if (browserErrors.length) throw new Error(`Browser errors:\n${browserErrors.join
 
 await browser.close();
 await server.close();
-console.log(`\nWrote ${shots.length + 7} shot(s) to ${outDir}`);
+console.log(`\nWrote ${shots.length + 11} shot(s) to ${outDir}`);

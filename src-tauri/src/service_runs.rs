@@ -20,7 +20,6 @@ impl StudioService {
             .unwrap_or("workflow");
         let slug = slug(graph_name);
         let run_directory = self.workspace().join("runs").join(format!("{slug}-{id}"));
-        fs::create_dir_all(&run_directory)?;
         let timestamp = now();
         let studio_run = StudioRun {
             id: id.clone(),
@@ -122,7 +121,9 @@ impl StudioService {
             .cloned()
         {
             let run_directory = self.required_run(id)?.run_directory;
-            fs::write(run_directory.join("cancel.request"), now())?;
+            if run_directory.is_dir() {
+                fs::write(run_directory.join("cancel.request"), now())?;
+            }
             process
                 .lock()
                 .expect("child process lock poisoned")
@@ -465,16 +466,46 @@ impl StudioService {
     }
 
     fn persist_run(&self, run: &StudioRun) -> StudioResult<()> {
-        fs::create_dir_all(&run.run_directory)?;
-        write_json_atomic(&run.run_directory.join("studio-run.json"), &stored_run(run))
+        let path = self
+            .workspace()
+            .join(".mere-graph-studio/run-records")
+            .join(format!("{}.json", run.id));
+        write_json_atomic(&path, &stored_run(run))
     }
 
     fn restore_runs(&self) -> StudioResult<()> {
+        let records = self.workspace().join(".mere-graph-studio/run-records");
         let run_root = self.workspace().join("runs");
+        let mut restored = HashMap::new();
+        if records.is_dir() {
+            for entry in fs::read_dir(records)? {
+                let entry = entry?;
+                if !entry.file_type()?.is_file() {
+                    continue;
+                }
+                let Ok(value) = read_required_json(&entry.path(), "Studio run") else {
+                    continue;
+                };
+                let Some(directory) = value.get("run_directory").and_then(Value::as_str) else {
+                    continue;
+                };
+                let directory = PathBuf::from(directory);
+                if !directory.starts_with(&run_root)
+                    || directory
+                        .components()
+                        .any(|component| matches!(component, Component::ParentDir))
+                {
+                    continue;
+                }
+                if let Ok(run) = restore_run(value, directory) {
+                    restored.insert(run.id.clone(), run);
+                }
+            }
+        }
         if !run_root.is_dir() {
+            *self.runs.lock().expect("runs lock poisoned") = restored;
             return Ok(());
         }
-        let mut restored = HashMap::new();
         for entry in fs::read_dir(run_root)? {
             let entry = entry?;
             let run_directory = entry.path();
@@ -486,7 +517,7 @@ impl StudioService {
                 continue;
             };
             if let Ok(run) = restore_run(value, run_directory) {
-                restored.insert(run.id.clone(), run);
+                restored.entry(run.id.clone()).or_insert(run);
             }
         }
         *self.runs.lock().expect("runs lock poisoned") = restored;

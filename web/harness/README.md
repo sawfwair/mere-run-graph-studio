@@ -36,6 +36,7 @@ pnpm harness:shoot hero=mode=pro  # custom "name=query" shots
 ```
 
 - Output goes to `web/harness/shots/` (gitignored). Override with `HARNESS_OUT`.
+- The matrix also captures configured and missing-runtime desktop setup at desktop and narrow widths. Plugin installation is previewed with a mock runtime; the package proof runs the real CLI separately.
 - The command checks inline prompt editing, undo, reference preservation,
   previous-run labeling, and library navigation. Live-run checks cover reported
   progress, early outputs, failure retention, pinning, comparison, and cancellation. It also checks desktop, tablet,

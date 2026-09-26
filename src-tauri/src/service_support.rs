@@ -88,6 +88,10 @@ fn command_status(path: Option<&Path>, required: bool) -> CommandStatus {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
             let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+            if required && let Err(reason) = compatible_runtime(path, &stdout) {
+                return CommandStatus { path: Some(path.display().to_string()), available: false,
+                    version: Some(stdout), error: Some(reason.to_string()) };
+            }
             CommandStatus {
                 path: Some(path.display().to_string()),
                 available: true,
@@ -114,9 +118,7 @@ fn command_status(path: Option<&Path>, required: bool) -> CommandStatus {
 }
 
 fn discover_command(name: &str) -> Option<PathBuf> {
-    if let Ok(path) = which::which(name) {
-        return Some(path);
-    }
+    let from_path = which::which(name).ok();
     let home =
         std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
     let executable = if cfg!(windows) {
@@ -125,18 +127,27 @@ fn discover_command(name: &str) -> Option<PathBuf> {
         name.to_owned()
     };
     let mut candidates = Vec::new();
+    if let Some(path) = from_path { candidates.push(path); }
     if let Some(home) = home {
         candidates.push(home.join(".local/bin").join(&executable));
         candidates.push(home.join("bin").join(&executable));
     }
     if cfg!(target_os = "macos") {
+        candidates.push(PathBuf::from("/Applications/MereRun.app/Contents/Helpers/mere.run"));
+        if let Some(home) = std::env::var_os("HOME") {
+            candidates.push(PathBuf::from(home).join("Applications/MereRun.app/Contents/Helpers/mere.run"));
+        }
         candidates.push(PathBuf::from("/opt/homebrew/bin").join(&executable));
         candidates.push(PathBuf::from("/usr/local/bin").join(&executable));
     } else if cfg!(target_os = "linux") {
         candidates.push(PathBuf::from("/usr/local/bin").join(&executable));
         candidates.push(PathBuf::from("/usr/bin").join(&executable));
     }
-    candidates.into_iter().find(|path| path.is_file())
+    if name == "mere.run" {
+        candidates.into_iter().find(|path| path.is_file() && command_status(Some(path), true).available)
+    } else {
+        candidates.into_iter().find(|path| path.is_file())
+    }
 }
 
 fn resolve_required_command(raw: &str, label: &str) -> StudioResult<PathBuf> {
@@ -145,6 +156,9 @@ fn resolve_required_command(raw: &str, label: &str) -> StudioResult<PathBuf> {
         return Err(error(format!("{label} path must not be empty")));
     }
     let requested = expand_user_path(trimmed)?;
+    let requested = if requested.extension().is_some_and(|extension| extension == "app") {
+        requested.join("Contents/Helpers/mere.run")
+    } else { requested };
     let resolved = if requested.components().count() == 1 {
         which::which(trimmed).unwrap_or(requested)
     } else {

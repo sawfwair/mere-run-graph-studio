@@ -69,6 +69,7 @@ export interface CatalogEntry {
     side_effects?: string;
   };
   requirements?: {
+    network_access?: boolean;
     accelerator_backends?: string[];
     model_ids?: string[];
   };

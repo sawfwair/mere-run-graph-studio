@@ -10,6 +10,30 @@ use tauri::Manager;
 use commands::*;
 use service::StudioService;
 
+/// Exercise the packaged host's normal local service in an isolated app-data directory.
+pub fn verify_local_package(
+    runtime: std::path::PathBuf,
+    app_data: std::path::PathBuf,
+) -> Result<serde_json::Value, String> {
+    let service =
+        Arc::new(StudioService::new(app_data.clone()).map_err(|reason| reason.to_string())?);
+    let status = service
+        .configure(model::ConfigureRequest {
+            workspace: app_data.join("workspace").display().to_string(),
+            mere_run_command: runtime.display().to_string(),
+            workflow_tools_command: String::new(),
+            onboarding_complete: true,
+        })
+        .map_err(|reason| reason.to_string())?;
+    if !status.mere_run.available {
+        return Err(status
+            .mere_run
+            .error
+            .unwrap_or_else(|| "Runtime is unavailable".to_owned()));
+    }
+    service.verify_local().map_err(|reason| reason.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -26,6 +50,11 @@ pub fn run() {
             studio_status,
             studio_configure,
             studio_catalog,
+            studio_discover_tools,
+            studio_open_runtime_downloads,
+            studio_plugins,
+            studio_setup_plugin,
+            studio_verify_local,
             studio_executors,
             studio_projects,
             studio_load_project,

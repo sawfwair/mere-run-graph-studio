@@ -10,10 +10,10 @@ const ok = <T>(result: T | null, error = ''): CommandDocument<T> => ({ exit_code
 const idle = (): ModelPull => ({ model: '', state: 'installed', percent: 100, received_bytes: null, total_bytes: null, detail: '', install_path: null, stderr: '', updated_at: '' });
 
 export const HARNESS_CATALOG: CatalogEntry[] = [
-  { kind: 'text.prompt', title: 'Prompt', category: 'text', inputs: [{ name: 'text', type: 'string', required: true }], outputs: [{ name: 'text', type: 'string' }] },
+  { kind: 'text.prompt', title: 'Prompt', category: 'text', inputs: [{ name: 'text', type: 'string', required: true }], outputs: [{ name: 'text', type: 'string' }], requirements: { network_access: false } },
   { kind: 'image.generate', title: 'Generate image', category: 'image', inputs: [{ name: 'prompt', type: 'string', required: true }, { name: 'model', type: 'string' }, { name: 'seed', type: 'number' }], outputs: [{ name: 'image', type: 'asset' }] },
   { kind: 'image.upscale', title: 'Upscale image', category: 'image', inputs: [{ name: 'image', type: 'asset', required: true }], outputs: [{ name: 'image', type: 'asset' }] },
-  { kind: 'video.generate', title: 'Generate video', category: 'video', inputs: [{ name: 'prompt', type: 'string' }, { name: 'image', type: 'asset' }, { name: 'model', type: 'string' }], outputs: [{ name: 'video', type: 'asset' }] },
+  { kind: 'video.generate', title: 'Generate video', category: 'video', inputs: [{ name: 'prompt', type: 'string' }, { name: 'image', type: 'asset' }, { name: 'model', type: 'string' }], outputs: [{ name: 'video', type: 'asset' }], requirements: { network_access: true } },
   { kind: 'audio.generate', title: 'Generate audio', category: 'audio', inputs: [{ name: 'prompt', type: 'string' }], outputs: [{ name: 'audio', type: 'asset' }] },
   { kind: 'boolean.value', title: 'Boolean', category: 'values', inputs: [{ name: 'value', type: 'boolean', required: true }], outputs: [{ name: 'value', type: 'boolean' }] },
   { kind: 'number.value', title: 'Number', category: 'values', inputs: [{ name: 'value', type: 'number', required: true }], outputs: [{ name: 'value', type: 'number' }] },

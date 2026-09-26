@@ -96,6 +96,8 @@ immutable graph contract through the configured public client.
 
 ## Offline local Studio
 
+For setup, model and plugin preparation, and a packaged offline acceptance check, see [Run Graph Studio locally](docs/local-desktop.md).
+
 The desktop app is the complete local product. Launching it, authoring and
 saving projects, loading the local catalog, validation, preflight, and local
 execution never require Mere World authentication or network access. Studio

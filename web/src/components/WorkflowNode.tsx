@@ -16,6 +16,7 @@ import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { NodeExecutionState } from '../canvas-execution';
 import { NodeExecution } from './CanvasRunBar';
 import { NodeOutputPanel } from './NodeOutputPanel';
+import { NetworkBadge } from './NetworkBadge';
 import type {
   CatalogEntry,
   CatalogField,
@@ -427,6 +428,7 @@ function WorkflowNodeView({ data, selected }: NodeProps<WorkflowFlowNode>) {
         <span className="node-ordinal" title={`Node ${ordinal}`}><span>Node</span>{String(ordinal).padStart(2, '0')}</span>
       </header>
       <NodeExecution execution={data.execution} />
+      <div className="node-network"><NetworkBadge entry={entry} /></div>
       <NodePrompt data={data} />
       <NodeModelSelector data={data} entry={entry} value={value} />
       {entry?.presentation?.style === 'material' ? (

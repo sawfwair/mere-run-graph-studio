@@ -26,6 +26,7 @@ import { categoryKey, categoryTitle, friendlyType, type CategoryKey, type Studio
 import { NODE_DRAG_TYPE, PRESET_DRAG_TYPE } from './GraphCanvas';
 import type { SavedPreset } from '../presets';
 import type { CatalogEntry, TemplateEntry, WorkflowGraph } from '../types';
+import { NetworkBadge } from './NetworkBadge';
 
 interface LibraryProps {
   catalog: CatalogEntry[];
@@ -234,6 +235,7 @@ export function Library({
                         <span className="catalog-icon"><Icon size={15} strokeWidth={1.9} /></span>
                         <span className="catalog-copy">
                           <strong>{entry.title}</strong>
+                          <NetworkBadge entry={entry} />
                           {mode === 'easy' ? (
                             entry.description ? <small className="clamp">{entry.description}</small> : null
                           ) : (

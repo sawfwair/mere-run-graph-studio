@@ -42,6 +42,7 @@ import { CloudLanding } from './components/CloudLanding';
 import { CommandPalette, type PaletteGroup } from './components/CommandPalette';
 import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
 import { DesktopSetup } from './components/DesktopSetup';
+import { DesktopTools } from './components/DesktopTools';
 import { GraphCanvas, type CanvasPosition } from './components/GraphCanvas';
 import { HelpOverlay } from './components/HelpOverlay';
 import { Inspector } from './components/Inspector';
@@ -1991,6 +1992,7 @@ function NativeApp() {
   if (settings || !status.onboarding_complete || !status.mere_run.available) {
     return <DesktopSetup
       status={status}
+      tools={<DesktopTools runtime={runtime} status={status} onStatus={setStatus} />}
       settings={settings || status.onboarding_complete}
       saving={saving}
       error={error}
