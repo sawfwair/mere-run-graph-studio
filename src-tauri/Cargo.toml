@@ -1,6 +1,6 @@
 [package]
 name = "mere-graph-studio"
-version = "0.3.1"
+version = "0.3.2"
 description = "Native desktop host for Mere Graph Studio"
 authors = ["Sawfwair Inc."]
 edition = "2024"

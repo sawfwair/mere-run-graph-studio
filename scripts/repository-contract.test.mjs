@@ -45,7 +45,7 @@ test('repository has one synchronized desktop version', async () => {
 
   assert.deepEqual(
     new Set([packageDocument.version, tauri.version, cargoVersion, studio?.minimum_version]),
-    new Set(['0.3.1']),
+    new Set(['0.3.2']),
   );
 });
 
@@ -129,6 +129,17 @@ test('automation is least-privilege and third-party actions are immutable', asyn
     assert.ok(actionReferences.length > 0);
     for (const reference of actionReferences) assert.match(reference, /^[0-9a-f]{40}$/u);
   }
+});
+
+test('ad hoc macOS release leaves notarization variables unset', async () => {
+  const workflow = await text('.github/workflows/release.yml');
+  const start = workflow.indexOf('      - name: Build ad hoc macOS packages');
+  const end = workflow.indexOf('      - name: Build Windows and Linux packages', start);
+  assert.ok(start > 0 && end > start);
+  const unsignedLane = workflow.slice(start, end);
+  assert.match(unsignedLane, /APPLE_SIGNING_IDENTITY: '-'/u);
+  assert.doesNotMatch(unsignedLane, /^\s+APPLE_(?:ID|PASSWORD|TEAM_ID):/gmu);
+  assert.match(workflow, /macOS signing is configured but \$name is missing/u);
 });
 
 test('local Markdown links resolve inside the repository', async () => {

@@ -36,9 +36,6 @@ jobs:
             args: ""
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    env:
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -62,8 +59,31 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
+      - name: Detect signing credentials
+        id: signing
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          if [[ "$RUNNER_OS" == "macOS" && -n "$APPLE_CERTIFICATE" ]]; then
+            for name in APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+              if [[ -z "${!name}" ]]; then
+                echo "macOS signing is configured but $name is missing" >&2
+                exit 1
+              fi
+            done
+            echo "apple=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [[ "$RUNNER_OS" == "Windows" && -n "$WINDOWS_CERTIFICATE" ]]; then
+            echo "windows=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Import macOS signing identity
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -71,19 +91,46 @@ jobs:
         run: ./scripts/import-macos-certificate.sh
       - name: Import Windows signing identity
         id: windows-signing
-        if: runner.os == 'Windows' && env.WINDOWS_CERTIFICATE != ''
+        if: runner.os == 'Windows' && steps.signing.outputs.windows == 'true'
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         shell: pwsh
         run: ./scripts/prepare-windows-signing.ps1
-      - uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+      - name: Build notarized macOS packages
+        if: runner.os == 'macOS' && steps.signing.outputs.apple == 'true'
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY || '-' }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Mere Graph Studio ${{ github.ref_name }}
+          releaseBody: Cross-platform Mere Graph Studio desktop installers. See the repository compatibility matrix for the required mere.run version.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+      - name: Build ad hoc macOS packages
+        if: runner.os == 'macOS' && steps.signing.outputs.apple != 'true'
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: '-'
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Mere Graph Studio ${{ github.ref_name }}
+          releaseBody: Cross-platform Mere Graph Studio desktop installers. See the repository compatibility matrix for the required mere.run version.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+      - name: Build Windows and Linux packages
+        if: runner.os != 'macOS'
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Mere Graph Studio ${{ github.ref_name }}
