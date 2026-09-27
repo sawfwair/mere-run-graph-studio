@@ -8,7 +8,7 @@ Studio-specific execution format.
 | --- | --- | --- |
 | `mere.run` | `0.24.0` | Graph validation, creative material intrinsics, immutable-bundle execution, SSH, and Relay clients |
 | `mere-workflow-tools` | `0.3.0` | Provider SDK, compiler, creative templates, and ComfyUI import |
-| Mere Graph Studio | `0.3.0` | Offline Tauri desktop and hosted creative-material authoring UI |
+| Mere Graph Studio | `0.3.1` | Offline Tauri desktop and hosted creative-material authoring UI |
 | `mere.run-node` | `0.1.9` | Relay graph worker and fleet model plans |
 
 The shared execution contracts are workflow graph schema 1,
