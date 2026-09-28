@@ -24,7 +24,9 @@ export function createMockRuntime(example = false, templates = false): StudioRun
   const mock: StudioRuntime = {
     executionScope: 'cloud' as const,
     catalog: async () => ok({ nodes: [...HARNESS_CATALOG, ...(example ? [{ kind: 'text.value', title: 'Text value', category: 'text', presentation: { style: 'material', primary_argument: 'value' }, inputs: [{ name: 'value', type: 'string', required: true, multiline: true }], outputs: [{ name: 'text', type: 'string' }] } satisfies CatalogEntry] : [])] }),
-    executors: async () => ok({ executors: [{ kind: 'relay', name: 'fleet' }] }),
+    executors: async () => ok({ executors: [{ reference: 'relay:fleet', kind: 'relay', name: 'fleet', installed_model_ids: ['image-krea2-raw', 'video-ltx23-av-mlx'] }] }),
+    models: async () => ok({ installed_model_ids: ['image-krea2-raw', 'video-ltx23-av-mlx'] }),
+    probeExecutor: async () => ok({ installed_model_ids: ['image-krea2-raw', 'video-ltx23-av-mlx'] }),
     templates: async () => ({ available: templates, document: ok({ templates: templates ? [
       { id: 'product-hero', title: 'Product hero', description: 'Create a product image and video.', tags: ['image', 'video'] },
     ] : [] }) }),

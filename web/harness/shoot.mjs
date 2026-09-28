@@ -89,6 +89,43 @@ page.on('console', (message) => {
 });
 page.on('pageerror', (error) => browserErrors.push(error.message));
 
+async function openAdvancedOptions() {
+  const toggle = page.getByRole('button', { name: /Advanced options/ });
+  if (await toggle.count()) await toggle.click();
+}
+
+async function verifyInstalledModelPickers() {
+  await openAdvancedOptions();
+  const imageModel = page.locator('.inspector-body').getByRole('combobox', { name: 'Model' });
+  if (await imageModel.locator('option[value="image-krea2-raw"]').count() !== 1 ||
+    await imageModel.locator('option[value="video-ltx23-av-mlx"]').count() !== 0) {
+    throw new Error('Image model picker did not use installed image models');
+  }
+  await page.locator('.react-flow__node-workflow').nth(1).click();
+  await page.locator('.inspector-heading').filter({ hasText: 'Generate video' }).waitFor();
+  await openAdvancedOptions();
+  const videoModel = page.locator('.inspector-body').getByRole('combobox', { name: 'Model' });
+  if (await videoModel.locator('option[value="video-ltx23-av-mlx"]').count() !== 1 ||
+    await videoModel.locator('option[value="image-krea2-raw"]').count() !== 0) {
+    throw new Error('Video model picker did not use installed video models');
+  }
+  await videoModel.selectOption('video-ltx23-av-mlx');
+  if (await videoModel.inputValue() !== 'video-ltx23-av-mlx') throw new Error('Video model picker did not update the graph');
+  await page.screenshot({ path: resolve(outDir, 'video-model-picker-desktop.png') });
+}
+
+async function captureMobileModelPicker() {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('tab', { name: 'Inspect' }).click();
+  await openAdvancedOptions();
+  await page.locator('.inspector-body').getByRole('combobox', { name: 'Model' }).waitFor();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) {
+    throw new Error('Video model picker overflows the mobile viewport');
+  }
+  await page.screenshot({ path: resolve(outDir, 'video-model-picker-mobile.png') });
+  await page.setViewportSize({ width: 1600, height: 1000 });
+}
+
 async function verifyInspectorCanvasInteraction() {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(base, { waitUntil: 'networkidle' });
@@ -108,11 +145,14 @@ async function verifyInspectorCanvasInteraction() {
     throw new Error('Inspector prompt edit did not update the controlled graph value');
   }
 
+  await verifyInstalledModelPickers();
+
   await page.getByRole('button', { name: 'Collapse inspector' }).click();
   await page.locator('.inspector-rail').waitFor();
   await page.getByRole('button', { name: 'Expand inspector' }).click();
   await page.locator('.inspector-panel').waitFor();
-  console.log('✓ canvas selection and inspector edit/collapse interaction');
+  await captureMobileModelPicker();
+  console.log('✓ canvas selection, installed model pickers, and inspector edit/collapse interaction');
 }
 
 async function verifyLibraryAndOutline() {

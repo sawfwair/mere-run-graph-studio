@@ -34,6 +34,7 @@ import {
   schemaFieldType,
 } from '../graph';
 import { decodeFieldType, parseJsonValue } from '../decode';
+import { candidateModels, modelFieldFor } from '../models';
 import {
   categoryKey,
   categoryTitle,
@@ -65,6 +66,7 @@ interface InspectorProps {
   inputs: JsonObject;
   sidecar: EditorSidecar;
   catalog: CatalogEntry[];
+  availableModels: string[];
   selectedNodeId: string | null;
   selectedNodeIds: string[];
   selectedInputName: string | null;
@@ -418,6 +420,8 @@ function Section({
 function ArgumentField({
   graph,
   catalog,
+  entry,
+  availableModels,
   node,
   field,
   mode,
@@ -426,6 +430,8 @@ function ArgumentField({
 }: {
   graph: WorkflowGraph;
   catalog: CatalogEntry[];
+  entry: CatalogEntry | undefined;
+  availableModels: string[];
   node: WorkflowNode;
   field: CatalogField;
   mode: StudioMode;
@@ -444,7 +450,7 @@ function ArgumentField({
       <div className="field-heading">
         <span>{label}{field.required ? <b className="required-mark" title="Required">*</b> : null}</span>
         <span className="field-heading-actions">
-          <small>{mode === 'easy' ? friendlyType(field.type) : field.type}</small>
+          <small>{field.name === modelFieldFor(entry) ? 'model' : mode === 'easy' ? friendlyType(field.type) : field.type}</small>
           {promotable ? (
             <button
               className="icon-button tiny"
@@ -456,7 +462,7 @@ function ArgumentField({
         </span>
       </div>
       <ArgumentModeButtons {...{ field, mode, argumentMode, options, onUpdate }} />
-      <ArgumentValueEditor {...{ field, mode, argumentMode, value, options, optionsForType, onUpdate }} />
+      <ModelAwareArgumentEditor {...{ entry, availableModels, field, mode, argumentMode, value, options, optionsForType, onUpdate }} />
       {field.description ? <small className="field-description">{field.description}</small> : null}
     </div>
   );
@@ -487,6 +493,32 @@ interface ArgumentValueProps {
   options: ReferenceOption[];
   optionsForType: (type: FieldType) => ReferenceOption[];
   onUpdate: (name: string, value: JsonValue | undefined) => void;
+}
+
+function modelOptionLabel(model: string, installed: string[]): string {
+  return installed.includes(model) ? model : `${model} (not installed)`;
+}
+
+function ModelPlaceholder({ required, hasModels }: { required: boolean; hasModels: boolean }) {
+  if (required && hasModels) return null;
+  return <option value="">{hasModels ? 'Default model' : 'No installed models'}</option>;
+}
+
+function ModelAwareArgumentEditor(props: ArgumentValueProps & { entry: CatalogEntry | undefined; availableModels: string[] }) {
+  const { entry, availableModels, field, value, argumentMode, onUpdate } = props;
+  if (argumentMode !== 'constant' || field.name !== modelFieldFor(entry)) return <ArgumentValueEditor {...props} />;
+  const models = candidateModels(entry, value, availableModels);
+  const current = typeof value === 'string' ? value : '';
+  return <>
+    <select aria-label="Model" value={current} disabled={!models.length && !current}
+      onChange={(event) => onUpdate(field.name, event.target.value || undefined)}>
+      <ModelPlaceholder required={field.required ?? false} hasModels={models.length > 0} />
+      {models.map((model) => <option key={model} value={model}>
+        {modelOptionLabel(model, availableModels)}
+      </option>)}
+    </select>
+    {!models.length ? <small className="field-description">No {entry?.category ?? ''} models are installed on this target.</small> : null}
+  </>;
 }
 
 function ArgumentModeButtons({ field, mode, argumentMode, options, onUpdate }: Omit<ArgumentValueProps, 'value' | 'optionsForType'>) {
@@ -584,11 +616,12 @@ function NodeIdentity({ mode, node, nodeId, onNodeId, onRename }: {
   </Section>;
 }
 
-function ArgumentList({ fields, entry, graph, catalog, node, mode, update, promote }: {
+function ArgumentList({ fields, entry, graph, catalog, availableModels, node, mode, update, promote }: {
   fields: CatalogField[];
   entry: CatalogEntry | undefined;
   graph: WorkflowGraph;
   catalog: CatalogEntry[];
+  availableModels: string[];
   node: WorkflowNode;
   mode: StudioMode;
   update: UpdateArgument;
@@ -596,7 +629,7 @@ function ArgumentList({ fields, entry, graph, catalog, node, mode, update, promo
 }) {
   const onPromote = promoteHandler(entry, node.id, promote);
   return <>
-    {fields.map((field) => <ArgumentField key={field.name} graph={graph} catalog={catalog} node={node} field={field} mode={mode} onUpdate={update} onPromote={onPromote} />)}
+    {fields.map((field) => <ArgumentField key={field.name} graph={graph} catalog={catalog} entry={entry} availableModels={availableModels} node={node} field={field} mode={mode} onUpdate={update} onPromote={onPromote} />)}
     {entry && !fields.length ? <div className="empty-state small">This node has no settings. To connect nodes, drag between compatible ports.</div> : null}
     {!entry ? <div className="empty-state small">Node definition unavailable</div> : null}
   </>;
@@ -658,9 +691,9 @@ function NodeOutputs({ mode, entry, node, onAdd }: { mode: StudioMode; entry: Ca
   </Section>;
 }
 
-function NodeInspector({ graph, catalog, node, mode, onUpdateNode, onPromoteArgument, onInlineMaterial, onRenameNode, onDeleteNode, onAddOutput }: Pick<
+function NodeInspector({ graph, catalog, availableModels, node, mode, onUpdateNode, onPromoteArgument, onInlineMaterial, onRenameNode, onDeleteNode, onAddOutput }: Pick<
   InspectorProps,
-  'graph' | 'catalog' | 'mode' | 'onUpdateNode' | 'onPromoteArgument' | 'onInlineMaterial' | 'onRenameNode' | 'onDeleteNode' | 'onAddOutput'
+  'graph' | 'catalog' | 'availableModels' | 'mode' | 'onUpdateNode' | 'onPromoteArgument' | 'onInlineMaterial' | 'onRenameNode' | 'onDeleteNode' | 'onAddOutput'
 > & { node: WorkflowNode }) {
   const entry = catalogEntryFor(node, catalog);
   const [nodeId, setNodeId] = useState(node.id);
@@ -677,7 +710,7 @@ function NodeInspector({ graph, catalog, node, mode, onUpdateNode, onPromoteArgu
     }
     onUpdateNode({ ...node, arguments: { ...node.arguments, [name]: value } });
   };
-  const argumentProps = { entry, graph, catalog, node, mode, update: updateArgument, promote: onPromoteArgument };
+  const argumentProps = { entry, graph, catalog, availableModels, node, mode, update: updateArgument, promote: onPromoteArgument };
   return <>
     {mode === 'easy' && entry?.description ? <div className="inspector-about">{entry.description}</div> : null}
     <NodeIdentity mode={mode} node={node} nodeId={nodeId} onNodeId={setNodeId} onRename={onRenameNode} />

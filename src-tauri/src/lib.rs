@@ -60,6 +60,8 @@ pub fn run() {
             studio_setup_plugin,
             studio_verify_local,
             studio_executors,
+            studio_models,
+            studio_executor_probe,
             studio_projects,
             studio_load_project,
             studio_save_project,

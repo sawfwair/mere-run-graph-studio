@@ -99,6 +99,16 @@ impl StudioService {
             .map(|result| result.document())
     }
 
+    pub fn models(&self) -> StudioResult<Value> {
+        self.run_mere(&["model", "list", "--json"])
+            .map(|result| result.document())
+    }
+
+    pub fn executor_probe(&self, reference: &str) -> StudioResult<Value> {
+        self.run_mere(&["executor", "probe", reference, "--json"])
+            .map(|result| result.document())
+    }
+
     pub fn projects(&self) -> StudioResult<Value> {
         let workspace = self.workspace();
         let state_root = workspace.join(".mere-graph-studio");
