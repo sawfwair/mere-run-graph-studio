@@ -1,6 +1,6 @@
 {
   "name": "mere-run-graph-studio",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Offline-first desktop and hosted authoring UI for portable mere.run workflow graphs",
   "private": true,
   "license": "MIT",
