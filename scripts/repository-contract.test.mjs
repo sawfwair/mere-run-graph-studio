@@ -139,7 +139,8 @@ test('ad hoc macOS release leaves notarization variables unset', async () => {
   const unsignedLane = workflow.slice(start, end);
   assert.match(unsignedLane, /APPLE_SIGNING_IDENTITY: '-'/u);
   assert.doesNotMatch(unsignedLane, /^\s+APPLE_(?:ID|PASSWORD|TEAM_ID):/gmu);
-  assert.match(workflow, /macOS signing is configured but \$name is missing/u);
+  assert.match(unsignedLane, /if: runner\.os == 'macOS'/u);
+  assert.doesNotMatch(workflow, /Build notarized macOS packages/u);
 });
 
 test('macOS update channel requires the pinned signed Sparkle feed', async () => {
