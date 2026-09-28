@@ -2,6 +2,11 @@
 
 This guide is for people who want to author and run workflows on their computer without Mere Relay.
 
+On an Apple Silicon Mac, Graph Studio checks its signed update feed on launch.
+Choose **Help > Check for Updates…** to check immediately. Updates replace the
+app bundle; saved projects and workspace files stay in their configured
+locations.
+
 Graph Studio's Tauri app invokes the public `mere.run` CLI through its Rust host. The CLI owns validation, preflight, execution, model loading, plugins, and artifacts. Studio stores workflow, input, and editor documents separately in your chosen workspace. Local runs do not require a Mere World account or Relay connection.
 
 ## Set up the runtime

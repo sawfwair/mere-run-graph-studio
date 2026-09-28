@@ -1718,8 +1718,9 @@ dependencies = [
 
 [[package]]
 name = "mere-graph-studio"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
+ "cc",
  "chrono",
  "mime_guess",
  "pretty_assertions",

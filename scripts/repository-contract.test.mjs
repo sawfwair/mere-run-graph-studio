@@ -45,7 +45,7 @@ test('repository has one synchronized desktop version', async () => {
 
   assert.deepEqual(
     new Set([packageDocument.version, tauri.version, cargoVersion, studio?.minimum_version]),
-    new Set(['0.3.2']),
+    new Set(['0.3.3']),
   );
 });
 
@@ -140,6 +140,20 @@ test('ad hoc macOS release leaves notarization variables unset', async () => {
   assert.match(unsignedLane, /APPLE_SIGNING_IDENTITY: '-'/u);
   assert.doesNotMatch(unsignedLane, /^\s+APPLE_(?:ID|PASSWORD|TEAM_ID):/gmu);
   assert.match(workflow, /macOS signing is configured but \$name is missing/u);
+});
+
+test('macOS update channel requires the pinned signed Sparkle feed', async () => {
+  const info = await text('src-tauri/Info.plist');
+  const config = JSON.parse(await text('src-tauri/tauri.conf.json'));
+  const prepare = await text('scripts/prepare-sparkle.mjs');
+  assert.match(info, /<key>SUFeedURL<\/key>\s*<string>https:\/\/mere\.run\/releases\/graph-studio\/appcast\.xml<\/string>/u);
+  assert.match(info, /<key>SUPublicEDKey<\/key>\s*<string>cbAicQUBTWGIoYOiW\/fvGY76L7dKiM7xuq5a2gN8IN8=<\/string>/u);
+  assert.match(info, /<key>SURequireSignedFeed<\/key>\s*<true\/>/u);
+  assert.match(info, /<key>SUVerifyUpdateBeforeExtraction<\/key>\s*<true\/>/u);
+  assert.deepEqual(config.bundle.macOS.frameworks, ['./.sparkle/Sparkle.framework']);
+  assert.match(config.build.beforeBuildCommand, /pnpm sparkle:prepare/u);
+  assert.match(prepare, /015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc/u);
+  assert.match(await text('.gitignore'), /src-tauri\/\.sparkle\//u);
 });
 
 test('local Markdown links resolve inside the repository', async () => {

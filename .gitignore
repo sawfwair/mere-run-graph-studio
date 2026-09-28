@@ -26,6 +26,7 @@ playwright-report/
 test-results/
 web/harness/shots/
 src-tauri/target/
+src-tauri/.sparkle/
 src-tauri/gen/schemas/
 src-tauri/icons/android/
 src-tauri/icons/ios/
