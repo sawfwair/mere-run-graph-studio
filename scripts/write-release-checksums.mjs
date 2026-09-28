@@ -16,15 +16,20 @@ async function filesBelow(root) {
   const entries = await readdir(root, { withFileTypes: true });
   const nested = await Promise.all(entries.map((entry) => {
     const path = join(root, entry.name);
-    return entry.isDirectory() ? filesBelow(path) : [path];
+    if (entry.isDirectory()) return entry.name.endsWith('.app') ? [] : filesBelow(path);
+    return entry.isFile() ? [path] : [];
   }));
   return nested.flat();
+}
+
+function isReleaseArtifact(path) {
+  return /(?:\.app\.tar\.gz|\.(?:dmg|AppImage|deb|rpm|msi|exe|msix|zip))$/iu.test(path);
 }
 
 export async function writeReleaseChecksums(root, output) {
   const artifacts = (await filesBelow(resolve(root)))
     .filter((path) => path.split(/[\\/]/u).includes('bundle'))
-    .filter((path) => !path.endsWith('.d') && !path.endsWith('.o'))
+    .filter(isReleaseArtifact)
     .sort((left, right) => left.localeCompare(right));
   if (artifacts.length === 0) throw new Error(`no release bundles found below ${root}`);
   const lines = await Promise.all(artifacts.map(async (path) => `${await sha256(path)}  ${path.split(/[\\/]/u).at(-1)}`));
