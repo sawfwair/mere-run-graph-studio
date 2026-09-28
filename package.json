@@ -1,6 +1,6 @@
 {
   "name": "mere-run-graph-studio",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Offline-first desktop and hosted authoring UI for portable mere.run workflow graphs",
   "private": true,
   "license": "MIT",
@@ -30,6 +30,7 @@
     "dev": "vite --config web/vite.config.ts",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
+    "sparkle:prepare": "node scripts/prepare-sparkle.mjs",
     "desktop:check": "cargo check --manifest-path src-tauri/Cargo.toml --locked",
     "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml --locked",
     "cloud:build": "pnpm cloud:check && vite build --config web/vite.cloud.config.ts",

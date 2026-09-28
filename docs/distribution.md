@@ -51,6 +51,27 @@ The workflow imports the certificate into an ephemeral keychain. Tauri signs,
 submits for notarization, and staples the result when all notarization values are
 present.
 
+The public Apple Silicon download is built from the pushed tag by the private
+`mere-run-release-tools` repository. That path verifies the exact source,
+Developer ID signature, notarization, staple, Gatekeeper acceptance, and public
+R2 bytes. GitHub's macOS draft assets may be ad-hoc signed; they are separate
+from the signed public download.
+
+## Apple Silicon updates
+
+The macOS app embeds pinned Sparkle 2.9.5. On launch it checks the signed
+[Graph Studio appcast](https://mere.run/releases/graph-studio/appcast.xml) for
+updates. **Help > Check for Updates…** starts an immediate check. Sparkle
+validates the feed and DMG with a Graph Studio-specific EdDSA key; only its
+public key is packaged in the app. It updates the complete app bundle, leaving
+workflow documents and local workspace data in place.
+
+The release tool publishes the signed feed only after the matching immutable
+DMG is hosted and verified. The current feed serves Apple Silicon; Intel builds
+and Windows/Linux packages continue to use their existing distribution paths.
+The pinned Sparkle framework is downloaded from its official release with a
+checked SHA-256 before macOS builds, then included and signed in the app bundle.
+
 ## Windows signing
 
 Configure:

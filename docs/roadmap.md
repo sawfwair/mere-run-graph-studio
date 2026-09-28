@@ -80,7 +80,8 @@ Remaining distribution work:
   notarized and Authenticode-signed release;
 - execute real-machine acceptance on Windows and Linux against compatible
   local or remote `mere.run` clients;
-- add automatic updates after a stable public release channel exists.
+- qualify a signed two-version Sparkle upgrade on Apple Silicon and extend the
+  signed update channel to Intel after an Intel public DMG is available.
 
 Exact exported-bundle reuse across local, SSH, and Relay is a `mere.run`
 runtime contract and is tested there. Studio consumes that contract instead of

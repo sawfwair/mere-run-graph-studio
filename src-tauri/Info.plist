@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>SUFeedURL</key>
+  <string>https://mere.run/releases/graph-studio/appcast.xml</string>
+  <key>SUPublicEDKey</key>
+  <string>cbAicQUBTWGIoYOiW/fvGY76L7dKiM7xuq5a2gN8IN8=</string>
+  <key>SURequireSignedFeed</key>
+  <true/>
+  <key>SUVerifyUpdateBeforeExtraction</key>
+  <true/>
+  <key>SUEnableAutomaticChecks</key>
+  <true/>
+</dict>
+</plist>

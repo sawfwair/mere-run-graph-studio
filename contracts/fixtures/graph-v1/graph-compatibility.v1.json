@@ -16,7 +16,7 @@
   "components": [
     { "id": "mere.run", "minimum_version": "0.24.0" },
     { "id": "mere-workflow-tools", "minimum_version": "0.3.0" },
-    { "id": "mere-run-graph-studio", "minimum_version": "0.3.2" },
+    { "id": "mere-run-graph-studio", "minimum_version": "0.3.3" },
     { "id": "mere.run-node", "minimum_version": "0.1.9" }
   ],
   "canonical_fixture": {

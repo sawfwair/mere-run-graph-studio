@@ -2,6 +2,8 @@ mod commands;
 mod error;
 mod model;
 mod service;
+#[cfg(target_os = "macos")]
+mod sparkle;
 
 use std::sync::Arc;
 
@@ -40,6 +42,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            sparkle::install(app)?;
             let app_data = app.path().app_data_dir()?;
             let service = StudioService::new(app_data)
                 .map_err(|reason| Box::<dyn std::error::Error>::from(reason.to_string()))?;
