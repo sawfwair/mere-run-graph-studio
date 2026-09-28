@@ -38,24 +38,14 @@ hosts, or an authentication dependency in native Studio.
 
 ## macOS signing and notarization
 
-Unsigned Apple Silicon CI packages receive an ad-hoc signature. Public release
-packages should configure these encrypted repository secrets:
-
-- `APPLE_CERTIFICATE`: base64 Developer ID Application `.p12`;
-- `APPLE_CERTIFICATE_PASSWORD`;
-- `KEYCHAIN_PASSWORD`: ephemeral CI keychain password;
-- `APPLE_SIGNING_IDENTITY`: exact Developer ID Application identity;
-- `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID` for notarization.
-
-The workflow imports the certificate into an ephemeral keychain. Tauri signs,
-submits for notarization, and staples the result when all notarization values are
-present.
+The GitHub release workflow builds ad-hoc macOS packages for draft CI assets.
+It does not have the Sparkle signing key or publish the update feed.
 
 The public Apple Silicon download is built from the pushed tag by the private
 `mere-run-release-tools` repository. That path verifies the exact source,
 Developer ID signature, notarization, staple, Gatekeeper acceptance, and public
-R2 bytes. GitHub's macOS draft assets may be ad-hoc signed; they are separate
-from the signed public download.
+R2 bytes. GitHub's macOS draft assets are separate from the signed public
+download.
 
 ## Apple Silicon updates
 
