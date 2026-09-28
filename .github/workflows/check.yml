@@ -63,5 +63,7 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
+      - run: pnpm sparkle:prepare
+        if: runner.os == 'macOS'
       - run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - run: pnpm tauri build --no-bundle
