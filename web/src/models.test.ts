@@ -6,6 +6,7 @@ import {
   executorsWithModel,
   missingModels,
   modelFieldFor,
+  parseLocalModelInventory,
   parseInstalledModels,
   parseInstalledModelsByExecutor,
   referencedModels,
@@ -41,6 +42,15 @@ describe('installed-model discovery', () => {
     };
     expect(parseInstalledModels(document).sort()).toEqual(['image-krea2-raw', 'image-zimage-nano', 'video-ltx-av']);
     expect(parseInstalledModels(undefined)).toEqual([]);
+  });
+
+  it('uses only installed and runtime-available rows from local model inventory', () => {
+    expect(parseLocalModelInventory({ inventory: { rows: [
+      { id: 'video-ltx23-av-mlx', status: 'installed', runtimeAvailable: true },
+      { id: 'video-missing', status: 'missing', runtimeAvailable: false },
+      { id: 'video-broken', status: 'installed', runtimeAvailable: false },
+      { id: 'video-ltx23-av-mlx', status: 'installed', runtimeAvailable: true },
+    ] } })).toEqual(['video-ltx23-av-mlx']);
   });
 });
 

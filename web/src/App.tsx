@@ -37,7 +37,7 @@ import { AppView, type AppVariation } from './components/AppView';
 import { BoardView } from './components/BoardView';
 import { ModelInstallSheet } from './components/ModelInstallSheet';
 import { buildVariationInputs, variationValues, type VariationCandidate } from './app-mode';
-import { buildModelVariants, executorsWithModel, missingModels, parseInstalledModels, parseInstalledModelsByExecutor } from './models';
+import { buildModelVariants, executorsWithModel, missingModels, parseInstalledModels, parseInstalledModelsByExecutor, parseLocalModelInventory } from './models';
 import { CloudLanding } from './components/CloudLanding';
 import { CommandPalette, type PaletteGroup } from './components/CommandPalette';
 import { DiagnosticsDrawer } from './components/DiagnosticsDrawer';
@@ -117,6 +117,24 @@ import './styles.css';
 
 type PaletteScope = 'all' | 'nodes';
 type JsonDocument = 'workflow' | 'inputs';
+const EMPTY_MODELS: string[] = [];
+
+function readModelInventory(runtime: StudioRuntime): Promise<CommandDocument<JsonValue> | null> {
+  return runtime.executionScope === 'cloud' ? Promise.resolve(null) : runtime.models().catch(() => null);
+}
+
+function installedModelSets(
+  executorDocument: CommandDocument<JsonValue>,
+  modelDocument: CommandDocument<JsonValue> | null,
+  cloud: boolean,
+): { available: string[]; byExecutor: Record<string, string[]> } {
+  const reported = parseInstalledModels(commandPayload(executorDocument));
+  const local = parseLocalModelInventory(modelDocument ? commandPayload(modelDocument) : undefined);
+  return {
+    available: [...new Set([...reported, ...local])],
+    byExecutor: { ...parseInstalledModelsByExecutor(commandPayload(executorDocument)), ...(cloud ? {} : { local }) },
+  };
+}
 
 function decodeDiagnostic(candidate: Record<string, unknown>): Diagnostic | null {
   if (typeof candidate.message !== 'string' || typeof candidate.severity !== 'string') return null;
@@ -423,9 +441,13 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
   const refreshInstalledModels = useCallback(async () => {
     try {
-      const executorDocument = await runtime.executors();
-      setAvailableModels(parseInstalledModels(commandPayload(executorDocument)));
-      setInstalledByExecutor(parseInstalledModelsByExecutor(commandPayload(executorDocument)));
+      const [executorDocument, modelDocument] = await Promise.all([
+        runtime.executors(),
+        readModelInventory(runtime),
+      ]);
+      const models = installedModelSets(executorDocument, modelDocument, runtime.executionScope === 'cloud');
+      setAvailableModels(models.available);
+      setInstalledByExecutor(models.byExecutor);
     } catch {
       // Best-effort refresh; the prior installed set stays in view.
     }
@@ -433,12 +455,16 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
   const loadEnvironment = useCallback((options?: { quiet?: boolean }) => {
     setHealth('connecting');
-    return Promise.all([runtime.catalog(), runtime.executors(), runtime.templates()])
-      .then(([catalogDocument, executorDocument, templateDocument]) => {
+    return Promise.all([
+      runtime.catalog(), runtime.executors(), runtime.templates(),
+      readModelInventory(runtime),
+    ])
+      .then(([catalogDocument, executorDocument, templateDocument, modelDocument]) => {
         const payload = commandPayload(catalogDocument);
         setCatalog(payload?.nodes ?? []);
-        setAvailableModels(parseInstalledModels(commandPayload(executorDocument)));
-        setInstalledByExecutor(parseInstalledModelsByExecutor(commandPayload(executorDocument)));
+        const models = installedModelSets(executorDocument, modelDocument, runtime.executionScope === 'cloud');
+        setAvailableModels(models.available);
+        setInstalledByExecutor(models.byExecutor);
         const references = collectExecutorReferences(commandPayload(executorDocument));
         const targets = runtime.executionScope === 'cloud' ? [...references] : ['local', ...references];
         setExecutors(targets.length ? targets : [runtime.executionScope === 'cloud' ? 'relay:fleet' : 'local']);
@@ -455,6 +481,18 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   }, [runtime, showError]);
 
   useEffect(() => { void loadEnvironment(); }, [loadEnvironment]);
+
+  useEffect(() => {
+    if (executor === 'local') return undefined;
+    let active = true;
+    void runtime.probeExecutor(executor).then((document) => {
+      if (!active || document.exit_code !== 0) return;
+      const installed = parseInstalledModels(commandPayload(document));
+      setInstalledByExecutor((current) => ({ ...current, [executor]: installed }));
+      setAvailableModels((current) => [...new Set([...current, ...installed])]);
+    }).catch(() => { /* An unreachable target has no selectable models. */ });
+    return () => { active = false; };
+  }, [executor, runtime]);
 
   useEffect(() => {
     if (!canvas.run) return;
@@ -1179,9 +1217,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   );
 
   // Models installed on the selected executor — scopes the node chip and the App
-  // view to the target you'll actually run on. Falls back to the fleet-wide union
-  // when the probe doesn't key installs per executor, preserving prior behavior.
-  const installedOnTarget = installedByExecutor[executor] ?? availableModels;
+  // view to the target you'll actually run on.
+  const installedOnTarget = installedByExecutor[executor] ?? EMPTY_MODELS;
   const appMissingModels = useMemo(
     () => (availableModels.length ? missingModels(graph, installedOnTarget) : []),
     [availableModels.length, graph, installedOnTarget],
@@ -1546,6 +1583,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       inputs={inputs}
       sidecar={sidecar}
       catalog={catalog}
+      availableModels={installedOnTarget}
       selectedNodeId={selectedNodeId}
       selectedNodeIds={selectedNodeIds}
       selectedInputName={selectedInputName}

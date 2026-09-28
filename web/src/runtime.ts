@@ -211,6 +211,8 @@ export interface StudioRuntime {
   readonly executionScope?: 'local' | 'cloud';
   catalog(): Promise<CommandDocument<{ nodes: CatalogEntry[] }>>;
   executors(): Promise<CommandDocument<JsonValue>>;
+  models(): Promise<CommandDocument<JsonValue>>;
+  probeExecutor(reference: string): Promise<CommandDocument<JsonValue>>;
   projects(): Promise<{ projects: ProjectSummary[] }>;
   loadProject(path: string): Promise<StudioProject>;
   saveProject(project: StudioProject): Promise<{ status: string; path: string }>;
@@ -316,6 +318,14 @@ export class NativeRuntime implements StudioRuntime {
 
   executors(): Promise<CommandDocument<JsonValue>> {
     return invokeDecoded('studio_executors', decodeJsonCommand);
+  }
+
+  models(): Promise<CommandDocument<JsonValue>> {
+    return invokeDecoded('studio_models', decodeJsonCommand);
+  }
+
+  probeExecutor(reference: string): Promise<CommandDocument<JsonValue>> {
+    return invokeDecoded('studio_executor_probe', decodeJsonCommand, { text: reference });
   }
 
   projects(): Promise<{ projects: ProjectSummary[] }> {

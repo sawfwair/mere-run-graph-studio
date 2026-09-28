@@ -406,8 +406,21 @@ export class CloudRuntime implements StudioRuntime {
     return command({ nodes }, nodes.length ? '' : 'Connect an updated mere.run Node to load its graph catalog.');
   }
 
-  executors(): Promise<CommandDocument<JsonValue>> {
-    return Promise.resolve(command({ executors: [{ kind: 'relay', name: 'fleet' }] }));
+  async executors(): Promise<CommandDocument<JsonValue>> {
+    const capabilities = await this.request('/api/relay/api/graph-jobs/capabilities', decodeCapabilities);
+    if ((capabilities.catalog?.nodes?.length ?? 0) > 0) this.capabilities = capabilities;
+    return command({ executors: [{ reference: 'relay:fleet', kind: 'relay', name: 'fleet', installed_model_ids: capabilities.installed_model_ids }] });
+  }
+
+  async models(): Promise<CommandDocument<JsonValue>> {
+    const capabilities = await this.fleet();
+    return command({ installed_model_ids: capabilities.installed_model_ids });
+  }
+
+  async probeExecutor(reference: string): Promise<CommandDocument<JsonValue>> {
+    if (reference !== 'relay:fleet') throw new Error(`Unknown executor: ${reference}`);
+    const capabilities = await this.request('/api/relay/api/graph-jobs/capabilities', decodeCapabilities);
+    return command({ installed_model_ids: capabilities.installed_model_ids });
   }
 
   projects(): Promise<{ projects: ProjectSummary[] }> {

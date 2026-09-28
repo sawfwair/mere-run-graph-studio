@@ -1,12 +1,9 @@
 import { clone } from './graph';
 import type { CatalogEntry, JsonObject, JsonValue, WorkflowGraph } from './types';
 
-// Generation nodes choose their model through a free-string `model` argument —
-// the catalog does not enumerate options. The option list is exactly the set of
-// models the executor reports as installed (surfaced by `mere.run executor list
-// --json` as `installed_model_ids` on each node / relay fleet worker), plus
-// whatever value is already set. We never invent a "known universe" of models:
-// showing a model that is not installed would only produce a preflight failure.
+// The graph contract stores a model ID string, while the editor offers the
+// installed IDs reported by the selected executor. Keep a previously selected
+// ID visible even when that model is no longer installed.
 
 export const MODEL_FIELD = 'model';
 
@@ -47,6 +44,17 @@ export function parseInstalledModels(document: JsonValue | undefined): string[] 
   };
   walk(document);
   return [...found];
+}
+
+/** Local `mere.run model list --json` is an inventory of installed and missing
+ * models. Only usable installed rows belong in the selector. */
+export function parseLocalModelInventory(document: JsonValue | undefined): string[] {
+  if (!isObject(document) || !isObject(document.inventory) || !Array.isArray(document.inventory.rows)) return [];
+  return [...new Set(document.inventory.rows.flatMap((row) => (
+    isObject(row) && typeof row.id === 'string' && row.status === 'installed' && row.runtimeAvailable !== false
+      ? [row.id]
+      : []
+  )))];
 }
 
 /** Candidate models for a node: the value already set (so the picker reflects

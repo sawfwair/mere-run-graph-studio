@@ -71,6 +71,8 @@ value_command!(studio_plugins, plugins);
 value_command!(studio_setup_plugin, setup_plugin, value);
 value_command!(studio_verify_local, verify_local);
 value_command!(studio_executors, executors);
+value_command!(studio_models, models);
+value_command!(studio_executor_probe, executor_probe, text);
 value_command!(studio_projects, projects);
 value_command!(studio_load_project, load_project, text);
 value_command!(studio_save_project, save_project, value);
