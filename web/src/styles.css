@@ -567,6 +567,8 @@ textarea.invalid, input.invalid { border-color: var(--danger); }
 /* slider */
 
 .slider-row { display: flex; align-items: center; gap: 10px; }
+.number-preset-editor { display: grid; gap: 8px; min-width: 0; }
+.number-preset-editor > input, .number-preset-editor > select { width: 100%; min-width: 0; }
 .slider-value { width: 64px; flex: 0 0 auto; text-align: right; font-family: var(--mono); font-size: 11px; }
 input[type='range'] {
   flex: 1;
@@ -2490,8 +2492,9 @@ dialog.wide-dialog, dialog.app-sharing-dialog { width: min(660px, calc(100vw - 3
 .app-field-hint { color: var(--muted); font-size: 11px; line-height: 1.4; }
 
 .app-field input[type='text'],
-.app-field input[type='number'] {
-  width: 100%; padding: 8px 10px; color: var(--text);
+.app-field input[type='number'],
+.app-field select {
+  width: 100%; height: auto; min-height: 38px; padding: 8px 10px; color: var(--text);
   border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: var(--surface-sunken); font-size: 13px;
 }
 .app-prompt { display: flex; flex-direction: column; gap: 4px; }

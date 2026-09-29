@@ -33,6 +33,10 @@ import {
   type VariationCandidate,
 } from '../app-mode';
 import { friendlyType, portTypeKey, summarizeValue, textValue } from '../ui';
+import { fieldChoices, numberPresets, stringChoices } from '../field-choices';
+import { FiniteSelect } from './FiniteSelect';
+import { FieldChoiceEditor } from './FieldChoiceEditor';
+import { NumberPresetEditor } from './NumberPresetEditor';
 import type { NodeRunPreviewItem } from '../run-preview';
 import type { EditorAppConfig, EditorSidecar, JsonObject, JsonValue, StudioRun, WorkflowGraph } from '../types';
 
@@ -275,7 +279,7 @@ function AppSettings({ visible, graph, sidecar, title, patchApp, patchField, mov
 function AppFields({ fields, inputs, onValue, inputAssetBlob, onEditGraph }: {
   fields: AppField[];
   inputs: JsonObject;
-  onValue: (name: string, value: JsonValue) => void;
+  onValue: (name: string, value: JsonValue | undefined) => void;
   inputAssetBlob: AppViewProps['inputAssetBlob'];
   onEditGraph: () => void;
 }) {
@@ -398,7 +402,9 @@ export function AppView(props: AppViewProps): ReactElement {
     setSweepName((current) => (candidates.some((candidate) => candidate.name === current) ? current : preferred?.name ?? ''));
   }, [candidates, graph]);
 
-  const setValue = (name: string, value: JsonValue) => onInputsChange({ ...inputs, [name]: value });
+  const setValue = (name: string, value: JsonValue | undefined) => onInputsChange(value === undefined
+    ? Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== name))
+    : { ...inputs, [name]: value });
 
   const patchApp = useCallback((mutate: (config: EditorAppConfig) => EditorAppConfig) => {
     onSidecarChange({ ...sidecar, app: mutate(sidecar.app ?? {}) });
@@ -448,7 +454,7 @@ export function AppView(props: AppViewProps): ReactElement {
 interface AppFieldControlProps {
   field: AppField;
   value: JsonValue | undefined;
-  onChange: (value: JsonValue) => void;
+  onChange: (value: JsonValue | undefined) => void;
   inputAssetBlob: (path: string, contentType?: string) => Promise<Blob>;
 }
 
@@ -496,10 +502,15 @@ function AppBooleanControl({ value, onChange }: Pick<AppFieldControlProps, 'valu
 
 function AppChoiceControl({ field, value, onChange }: Omit<AppFieldControlProps, 'inputAssetBlob'>) {
   const { definition } = field;
-  const selected = textValue(value, definition.values?.[0]);
+  const choices = stringChoices(definition) ?? [];
+  if (!choices.length || choices.length > 4 || (typeof value === 'string' && !choices.includes(value))) {
+    return <FiniteSelect choices={choices} value={typeof value === 'string' ? value : undefined}
+      onChange={onChange} ariaLabel={field.label} emptyLabel={definition.required ? 'Choose an option' : 'Use default'} />;
+  }
+  const selected = typeof value === 'string' ? value : undefined;
   return (
     <div className="app-choice-row">
-      {(definition.values ?? []).map((option) => <button type="button" key={option} className={`app-choice ${selected === option ? 'active' : ''}`} onClick={() => onChange(option)}>{option}</button>)}
+      {choices.map((option) => <button type="button" key={option} className={`app-choice ${selected === option ? 'active' : ''}`} onClick={() => onChange(option)}>{option}</button>)}
     </div>
   );
 }
@@ -518,8 +529,11 @@ function AppFieldControl(props: AppFieldControlProps) {
   const { definition, locked } = field;
   if (locked) return <div className="app-locked-value" title="Locked in this app">{summarizeValue(value, 96)}</div>;
   if (definition.type === 'boolean') return <AppBooleanControl value={value} onChange={onChange} />;
-  if (definition.type === 'enum') return <AppChoiceControl {...props} />;
-  if (definition.type === 'integer' || definition.type === 'number') return <AppNumberControl {...props} />;
+  const choices = fieldChoices(definition);
+  if (choices) return <AppFiniteControl {...props} choices={choices} />;
+  if (definition.type === 'integer' || definition.type === 'number') {
+    return <AppNumericControl {...props} />;
+  }
   if (portTypeKey(definition.type) === 'asset') return <AppAssetControl value={value} inputAssetBlob={inputAssetBlob} />;
   if (promptField(field)) {
     const text = textValue(value);
@@ -531,6 +545,22 @@ function AppFieldControl(props: AppFieldControlProps) {
     );
   }
   return <input type="text" value={textValue(value)} onChange={(event) => onChange(event.target.value)} />;
+}
+
+function AppFiniteControl(props: AppFieldControlProps & { choices: (string | number)[] }) {
+  const { field, choices, value, onChange } = props;
+  if (field.definition.type !== 'integer') return <AppChoiceControl {...props} />;
+  return <FieldChoiceEditor field={{ ...field.definition, name: field.name }} label={field.label} {...{ choices, value, onChange }} />;
+}
+
+function AppNumericControl(props: AppFieldControlProps) {
+  const { field, value, onChange } = props;
+  const numericField = { ...field.definition, name: field.name };
+  const presets = numberPresets(numericField);
+  if (presets && (field.definition.minimum === undefined || field.definition.maximum === undefined)) {
+    return <NumberPresetEditor field={numericField} presets={presets} value={value} onChange={onChange} />;
+  }
+  return <AppNumberControl {...props} />;
 }
 
 function AppFieldInput(props: AppFieldControlProps) {
