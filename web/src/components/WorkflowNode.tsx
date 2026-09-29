@@ -11,6 +11,9 @@ import {
 } from '../graph';
 import { parseJsonValue } from '../decode';
 import { candidateModels, modelFieldFor } from '../models';
+import { fieldChoices } from '../field-choices';
+import { FiniteSelect } from './FiniteSelect';
+import { FieldChoiceEditor } from './FieldChoiceEditor';
 import { argumentSummaries, categoryKey, categoryTitle, friendlyLabel, friendlyType, portTypeKey, splitFieldsForMode, textValue, type StudioMode } from '../ui';
 import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { NodeExecutionState } from '../canvas-execution';
@@ -115,14 +118,16 @@ function ChoiceMaterialEditor({ field, value, current, onArgumentChange }: Mater
   const options = Array.isArray(value.arguments.options)
     ? value.arguments.options.filter((item): item is string => typeof item === 'string')
     : [];
-  return (
-    <select className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`} value={textValue(current)} onChange={(event) => onArgumentChange(field.name, event.target.value)}>
-      {options.map((option) => <option key={option}>{option}</option>)}
-    </select>
-  );
+  return <FiniteSelect className={materialInputClass} ariaLabel={`${friendlyLabel(field.name)} for ${value.id}`}
+    choices={[...new Set(options)]} value={typeof current === 'string' ? current : undefined}
+    emptyLabel="Choose an option" onChange={(next) => onArgumentChange(field.name, next)} />;
 }
 
 function ScalarMaterialEditor({ field, value, current, onArgumentChange }: MaterialEditorContentProps) {
+  const choices = fieldChoices(field);
+  if (choices) return <FieldChoiceEditor className={materialInputClass} field={field}
+    label={`${friendlyLabel(field.name)} for ${value.id}`} choices={choices}
+    value={current} onChange={(next) => onArgumentChange(field.name, next)} />;
   if (field.type === 'boolean') {
     return (
       <label className="material-switch nodrag">
@@ -224,7 +229,7 @@ function MaterialEditor({
   if (!field || !onArgumentChange) return null;
   const props = { field, value, current: value.arguments[field.name], onArgumentChange };
   if (value.kind === 'choice.value') return <ChoiceMaterialEditor {...props} />;
-  if (field.type === 'boolean' || field.type === 'integer' || field.type === 'number' || field.type === 'string') {
+  if (field.type === 'boolean' || field.type === 'integer' || field.type === 'number' || field.type === 'string' || field.type === 'enum') {
     return <ScalarMaterialEditor {...props} />;
   }
   return <StructuredMaterialEditor {...props} />;

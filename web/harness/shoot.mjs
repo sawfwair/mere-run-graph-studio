@@ -358,6 +358,72 @@ async function verifyTemplateDialog() {
   console.log('✓ template dialog fields fit at desktop and mobile widths');
 }
 
+async function verifyChoiceControls() {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?controls=1`, { waitUntil: 'networkidle' });
+  await page.locator('.react-flow__node-workflow[data-id="controls"]').click();
+  await openAdvancedOptions();
+  const inspector = page.locator('.inspector-body');
+  const format = inspector.getByRole('combobox', { name: 'Format', exact: true });
+  if (await format.locator('option:checked').textContent() !== 'legacy (not available)') {
+    throw Error('An imported enum value must remain visible');
+  }
+  await inspector.getByRole('combobox', { name: 'Quality', exact: true }).selectOption({ label: 'final' });
+  await inspector.getByRole('combobox', { name: 'Patch size', exact: true }).selectOption({ label: '8' });
+  await inspector.getByRole('combobox', { name: 'FPS', exact: true }).selectOption('24');
+  const width = inspector.getByRole('combobox', { name: 'Width', exact: true });
+  if (await inspector.getByRole('spinbutton', { name: 'Custom width', exact: true }).inputValue() !== '640') {
+    throw Error('An imported custom number must remain editable');
+  }
+  await width.selectOption('1024');
+  await width.selectOption('custom');
+  await inspector.getByRole('spinbutton', { name: 'Custom width', exact: true }).fill('832');
+  await inspector.getByRole('combobox', { name: 'Backend', exact: true }).selectOption({ label: 'auto' });
+  await page.waitForFunction(() => {
+    const saved = localStorage.getItem('mere.graph-studio.recovery.v1') ?? '';
+    return ['"quality":"final"', '"patch_size":8', '"fps":24', '"width":832', '"backend":"auto"'].every((value) => saved.includes(value));
+  });
+  await page.screenshot({ path: resolve(outDir, 'choice-controls-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('tab', { name: 'Inspect' }).click();
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) throw Error('Choice controls overflow on mobile');
+  await page.screenshot({ path: resolve(outDir, 'choice-controls-mobile.png') });
+
+  await page.getByRole('tab', { name: 'Canvas', exact: true }).click();
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.locator('.react-flow__node-workflow[data-id="choice"] .workflow-node-header').click();
+  const selected = inspector.getByRole('combobox', { name: 'Selected', exact: true });
+  if (await selected.locator('option:checked').textContent() !== 'legacy (not available)') throw Error('Choice inspector must retain unavailable values');
+  await selected.selectOption({ label: 'draft' });
+  const inline = page.getByRole('combobox', { name: 'Selected for choice', exact: true });
+  if (await inline.locator('option:checked').textContent() !== 'draft') throw Error('Choice inspector and canvas must stay synchronized');
+
+  await page.getByRole('tab', { name: 'App', exact: true }).click();
+  const app = page.locator('.app-view');
+  await app.getByRole('combobox', { name: 'Format', exact: true }).selectOption({ label: 'webm' });
+  await app.getByRole('combobox', { name: 'Patch size', exact: true }).selectOption({ label: '4' });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: resolve(outDir, 'choice-app-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(250);
+  if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) throw Error('App choices overflow on mobile');
+  await page.screenshot({ path: resolve(outDir, 'choice-app-mobile.png') });
+
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await page.goto(`${base}/?controls=1&template=1`, { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Show panels' }).click();
+  await page.locator('.template-list > button').first().click();
+  const dialog = page.locator('dialog.wide-dialog[open]');
+  await dialog.getByRole('combobox', { name: 'quality', exact: true }).selectOption({ label: 'final' });
+  await dialog.getByRole('combobox', { name: 'patch_size', exact: true }).selectOption({ label: '8' });
+  await dialog.getByRole('button', { name: 'Create workflow', exact: true }).click();
+  await page.waitForFunction(() => {
+    const saved = localStorage.getItem('mere.graph-studio.recovery.v1') ?? '';
+    return saved.includes('"quality":"final"') && saved.includes('"patch_size":8');
+  });
+  console.log('✓ schema choices, bounded integers, custom number presets, choice-node synchronization, app forms, and template inputs');
+}
+
 async function verifyVideoImageConnection() {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto(`${base}/?video-unwired=1`, { waitUntil: 'networkidle' });
@@ -399,6 +465,7 @@ await verifyLiveRecovery();
 await verifyCreativeLoop();
 await verifyAppSharing();
 await verifyTemplateDialog();
+await verifyChoiceControls();
 await verifyVideoImageConnection();
 await verifyNodePromptEditing();
 await verifyInspectorCanvasInteraction();

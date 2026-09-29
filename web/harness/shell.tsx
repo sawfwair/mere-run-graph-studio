@@ -5,6 +5,7 @@ import { CloudLanding } from '../src/components/CloudLanding';
 import { liveRuntime } from './live-runtime';
 import { SharingRuntime } from './sharing-runtime';
 import { NODE_FIXTURE } from './node-fixture';
+import { CHOICE_PROJECT } from './choice-fixture';
 import { Workspace } from '../src/App';
 import { DesktopSetup } from '../src/components/DesktopSetup';
 import { DesktopTools } from '../src/components/DesktopTools';
@@ -29,13 +30,13 @@ set('mere-studio-canvas-focus', params.get('focus') === '0' ? '0' : '1');
 if (params.get('empty') === '1') {
   try { window.localStorage.removeItem('mere.graph-studio.recovery.v1'); } catch { /* ignore */ }
 } else {
-  const project = structuredClone(params.has('example') ? NODE_FIXTURE : HARNESS_PROJECT);
+  const project = structuredClone(params.has('controls') ? CHOICE_PROJECT : params.has('example') ? NODE_FIXTURE : HARNESS_PROJECT);
   if (params.has('sharing')) project.graph.outputs = { image: { $ref: 'nodes.render.outputs.image' } };
   if (params.has('video-unwired')) delete project.graph.nodes[1]?.arguments.image;
   set('mere.graph-studio.recovery.v1', JSON.stringify(project));
 }
 
-const mock = createMockRuntime(params.has('example'), params.has('template'));
+const mock = createMockRuntime(params.has('example'), params.has('template'), params.has('controls'));
 const timeline = params.has('live') ? liveRuntime(mock, params.get('live') === 'failed', params.get('live') === 'faults') : mock;
 const runtime = params.has('sharing') ? new SharingRuntime(timeline) : timeline;
 const desktopStatus: DesktopStatus = {

@@ -45,7 +45,7 @@ test('repository has one synchronized desktop version', async () => {
 
   assert.deepEqual(
     new Set([packageDocument.version, tauri.version, cargoVersion, studio?.minimum_version]),
-    new Set(['0.3.4']),
+    new Set(['0.3.5']),
   );
 });
 

@@ -35,6 +35,10 @@ import {
 } from '../graph';
 import { decodeFieldType, parseJsonValue } from '../decode';
 import { candidateModels, modelFieldFor } from '../models';
+import { fieldChoices, numberPresets } from '../field-choices';
+import { FiniteSelect } from './FiniteSelect';
+import { FieldChoiceEditor } from './FieldChoiceEditor';
+import { NumberPresetEditor } from './NumberPresetEditor';
 import {
   categoryKey,
   categoryTitle,
@@ -155,7 +159,7 @@ function JsonEditor({ value, onChange }: { value: JsonValue; onChange: (value: J
 interface ConstantEditorProps {
   field: CatalogField;
   value: JsonValue | undefined;
-  onChange: (value: JsonValue) => void;
+  onChange: (value: JsonValue | undefined) => void;
   referenceOptionsForType?: (type: FieldType) => ReferenceOption[];
 }
 
@@ -231,7 +235,7 @@ function SchemaConstantEditor({
               <small>{property.type}</small>
             </div>
             <SchemaValueEditor
-              schema={property}
+              schema={{ ...property, title: property.title ?? name }}
               value={objectValue[name]}
               onChange={(next) => onChange({ ...objectValue, [name]: next })}
               referenceOptionsForType={referenceOptionsForType}
@@ -318,7 +322,7 @@ function SchemaConstantEditor({
         multiline: schema.multiline,
       }}
       value={value}
-      onChange={onChange}
+      onChange={(next) => onChange(next ?? defaultSchemaValue(schema))}
     />
   );
 }
@@ -348,10 +352,31 @@ function SliderEditor({ field, value, onChange }: Pick<ConstantEditorProps, 'fie
   );
 }
 
+function InspectorNumberEditor({ field, value, onChange }: ConstantEditorProps) {
+  if (isSliderField(field)) return <SliderEditor field={field} value={value} onChange={onChange} />;
+  const presets = numberPresets(field);
+  if (presets) return <NumberPresetEditor field={field} presets={presets} value={value} onChange={onChange} />;
+  return (
+    <input
+      type="number"
+      min={field.minimum}
+      max={field.maximum}
+      step={field.step ?? (field.type === 'integer' ? 1 : 'any')}
+      value={typeof value === 'number' ? value : ''}
+      onChange={(event) => {
+        const numeric = field.type === 'integer' ? Number.parseInt(event.target.value, 10) : Number(event.target.value);
+        onChange(Number.isFinite(numeric) ? numeric : (field.minimum ?? 0));
+      }}
+    />
+  );
+}
+
 function ConstantEditor({ field, value, onChange, referenceOptionsForType }: ConstantEditorProps) {
   if (field.value_schema) {
     return <SchemaValueEditor schema={field.value_schema} value={value} onChange={onChange} referenceOptionsForType={referenceOptionsForType} />;
   }
+  const choices = fieldChoices(field);
+  if (choices) return <FieldChoiceEditor {...{ field, choices, value, onChange }} />;
   if (field.type === 'boolean') {
     return (
       <label className="switch-row">
@@ -361,30 +386,8 @@ function ConstantEditor({ field, value, onChange, referenceOptionsForType }: Con
       </label>
     );
   }
-  if (field.type === 'enum') {
-    return (
-      <select value={textValue(value)} onChange={(event) => onChange(event.target.value)}>
-        {(field.values ?? []).map((item) => <option key={item}>{item}</option>)}
-      </select>
-    );
-  }
-  if (field.type === 'integer' || field.type === 'number') {
-    if (isSliderField(field)) return <SliderEditor field={field} value={value} onChange={onChange} />;
-    return (
-      <input
-        type="number"
-        min={field.minimum}
-        max={field.maximum}
-        step={field.step ?? (field.type === 'integer' ? 1 : 'any')}
-        value={typeof value === 'number' ? value : ''}
-        onChange={(event) => {
-          const numeric = field.type === 'integer' ? Number.parseInt(event.target.value, 10) : Number(event.target.value);
-          onChange(Number.isFinite(numeric) ? numeric : (field.minimum ?? 0));
-        }}
-      />
-    );
-  }
-  if (field.type === 'json' || field.type === 'asset_collection' || field.type === 'asset_array') {
+  if (['integer', 'number'].includes(field.type)) return <InspectorNumberEditor {...{ field, value, onChange }} />;
+  if (['json', 'asset_collection', 'asset_array'].includes(field.type)) {
     return <JsonEditor value={value ?? (field.type === 'json' ? {} : [])} onChange={onChange} />;
   }
   if (isLongTextField(field)) {
@@ -462,7 +465,7 @@ function ArgumentField({
         </span>
       </div>
       <ArgumentModeButtons {...{ field, mode, argumentMode, options, onUpdate }} />
-      <ModelAwareArgumentEditor {...{ entry, availableModels, field, mode, argumentMode, value, options, optionsForType, onUpdate }} />
+      <ModelAwareArgumentEditor {...{ entry, availableModels, node, field, mode, argumentMode, value, options, optionsForType, onUpdate }} />
       {field.description ? <small className="field-description">{field.description}</small> : null}
     </div>
   );
@@ -504,8 +507,11 @@ function ModelPlaceholder({ required, hasModels }: { required: boolean; hasModel
   return <option value="">{hasModels ? 'Default model' : 'No installed models'}</option>;
 }
 
-function ModelAwareArgumentEditor(props: ArgumentValueProps & { entry: CatalogEntry | undefined; availableModels: string[] }) {
+function ModelAwareArgumentEditor(props: ArgumentValueProps & { entry: CatalogEntry | undefined; availableModels: string[]; node: WorkflowNode }) {
   const { entry, availableModels, field, value, argumentMode, onUpdate } = props;
+  if (argumentMode === 'constant' && entry?.kind === 'choice.value' && field.name === 'selected') {
+    return <ChoiceArgumentEditor {...props} />;
+  }
   if (argumentMode !== 'constant' || field.name !== modelFieldFor(entry)) return <ArgumentValueEditor {...props} />;
   const models = candidateModels(entry, value, availableModels);
   const current = typeof value === 'string' ? value : '';
@@ -519,6 +525,14 @@ function ModelAwareArgumentEditor(props: ArgumentValueProps & { entry: CatalogEn
     </select>
     {!models.length ? <small className="field-description">No {entry?.category ?? ''} models are installed on this target.</small> : null}
   </>;
+}
+
+function ChoiceArgumentEditor({ node, field, value, onUpdate }: ArgumentValueProps & { node: WorkflowNode }) {
+  const options = Array.isArray(node.arguments.options)
+    ? node.arguments.options.filter((option): option is string => typeof option === 'string')
+    : [];
+  return <FiniteSelect choices={[...new Set(options)]} value={typeof value === 'string' ? value : undefined}
+    ariaLabel="Selected" emptyLabel="Choose an option" onChange={(next) => onUpdate(field.name, next)} />;
 }
 
 function ArgumentModeButtons({ field, mode, argumentMode, options, onUpdate }: Omit<ArgumentValueProps, 'value' | 'optionsForType'>) {
@@ -816,9 +830,11 @@ function InputInspector({
       ) : definition.description ? <div className="inspector-about">{definition.description}</div> : null}
       <Section title="Value">
         <ConstantEditor
-          field={{ name, type: definition.type, values: definition.values, multiline: definition.type === 'string' }}
-          value={inputs[name]}
-          onChange={(value) => onInputsChange({ ...inputs, [name]: value })}
+          field={{ ...definition, name, multiline: definition.multiline ?? definition.type === 'string' }}
+          value={inputs[name] ?? definition.default}
+          onChange={(value) => onInputsChange(value === undefined
+            ? Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== name))
+            : { ...inputs, [name]: value })}
         />
         {mode === 'easy' && definition.required ? <small className="field-description">This value is required before running.</small> : null}
       </Section>
@@ -1032,9 +1048,9 @@ function inspectorSubtitle(props: InspectorProps, node: WorkflowNode | undefined
 }
 
 function InspectorContent({ props, node }: { props: InspectorProps; node: WorkflowNode | undefined }) {
-  if (node) return <NodeInspector {...props} node={node} />;
+  if (node) return <NodeInspector key={node.id} {...props} node={node} />;
   if (props.selectedNodeIds.length > 1) return <MultiSelectionInspector selectedNodeIds={props.selectedNodeIds} />;
-  if (props.selectedInputName) return <InputInspector {...props} name={props.selectedInputName} />;
+  if (props.selectedInputName) return <InputInspector key={props.selectedInputName} {...props} name={props.selectedInputName} />;
   if (props.selectedOutputName) return <OutputInspector {...props} name={props.selectedOutputName} />;
   if (props.selectedEditorItemId) return <EditorItemInspector {...props} itemId={props.selectedEditorItemId} />;
   return <GraphInspector {...props} />;
