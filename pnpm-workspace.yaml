@@ -1,0 +1,10 @@
+minimumReleaseAge: 4320
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 10080
+blockExoticSubdeps: true
+strictDepBuilds: true
+allowBuilds:
+  esbuild@0.28.1: true
+  sharp@0.34.5: true
+  workerd@1.20260714.1: true
+  workerd@1.20260721.1: true
