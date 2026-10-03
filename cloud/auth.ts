@@ -103,10 +103,27 @@ function appendSessionCookies(headers: Headers, url: URL, tokens: TokenResponse,
   if (refreshToken) headers.append('Set-Cookie', cookie(REFRESH_COOKIE, refreshToken, url, 30 * 24 * 60 * 60));
 }
 
+/** JWT expiry alone cannot establish a current grant. Do not cache admission. */
+async function isCurrentStudioUser(userId: string, env: Env): Promise<boolean> {
+  try {
+    const binding = env.AUTH_INTERNAL_TOKEN;
+    const internalToken = (typeof binding === 'string' ? binding : await binding?.get())?.trim();
+    if (!internalToken) return false;
+    const response = await fetch(new URL('/api/auth/app/admission', env.BROKER_ORIGIN), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${internalToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, clientId: CLIENT_ID, audienceOrigin: env.STUDIO_ORIGIN }),
+    });
+    const body: unknown = await response.json();
+    return response.ok && typeof body === 'object' && body !== null && 'allowed' in body && body.allowed === true;
+  } catch { return false; }
+}
+
 export async function verifyAccessToken(token: string, env: Env): Promise<Identity | null> {
   try {
-    const { payload } = await jwtVerify(token, getJwks(env.BROKER_ORIGIN), { issuer: env.BROKER_ORIGIN });
-    if (typeof payload.sub !== 'string' || !payload.sub) return null;
+    const { payload } = await jwtVerify(token, getJwks(env.BROKER_ORIGIN), { issuer: env.BROKER_ORIGIN, audience: CLIENT_ID });
+    if (typeof payload.sub !== 'string' || !payload.sub || typeof payload.exp !== 'number') return null;
+    if (!(await isCurrentStudioUser(payload.sub, env))) return null;
     return {
       user_id: payload.sub,
       email: typeof payload.email === 'string' ? payload.email : undefined,
