@@ -22,3 +22,8 @@ new_classes = ["StudioAccount"]
 BROKER_ORIGIN = "https://mere.world"
 RELAY_ORIGIN = "https://relay.mere.run"
 STUDIO_ORIGIN = "https://studio.mere.run"
+
+[[secrets_store_secrets]]
+binding = "AUTH_INTERNAL_TOKEN"
+store_id = "ec7fe4891f36489db029bd6fa02ff681"
+secret_name = "AUTH_INTERNAL_TOKEN"

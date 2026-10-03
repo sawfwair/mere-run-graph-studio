@@ -1,6 +1,7 @@
 export interface Env {
   STUDIO_ACCOUNTS: DurableObjectNamespace;
   ASSETS: Fetcher;
+  AUTH_INTERNAL_TOKEN?: string | { get(): Promise<string> };
   BROKER_ORIGIN: string;
   RELAY_ORIGIN: string;
   STUDIO_ORIGIN: string;
