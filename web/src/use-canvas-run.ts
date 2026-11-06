@@ -31,6 +31,17 @@ export function useCanvasRun(graph: WorkflowGraph, inputs: JsonObject, runs: Stu
     return () => { live = false; };
   }, [graph, inputs, graphJson, inputsJson]);
 
+  // Finished runs never change, so each one is inspected once instead of on
+  // every edit while the canvas looks for a run that matches the graph.
+  const finishedRuns = useRef(new Map<string, StudioRun>());
+  const inspectCached = useCallback(async (runId: string) => {
+    const cached = finishedRuns.current.get(runId);
+    if (cached) return cached;
+    const detail = await runtime.inspectRun(runId);
+    if (!runActive(detail.state)) finishedRuns.current.set(runId, detail);
+    return detail;
+  }, [runtime]);
+
   useEffect(() => {
     if (run || hashes.graphJson !== graphJson || hashes.inputsJson !== inputsJson) return undefined;
     let live = true;
@@ -38,7 +49,7 @@ export function useCanvasRun(graph: WorkflowGraph, inputs: JsonObject, runs: Stu
     void (async () => {
       for (const summary of runs.slice(0, 8)) {
         try {
-          const detail = await runtime.inspectRun(summary.id);
+          const detail = await inspectCached(summary.id);
           if (!live || generation.current !== currentGeneration) return;
           if (runMatchesSource(detail, hashes.graphHash, hashes.inputHash)) {
             setRun(detail);
@@ -48,7 +59,7 @@ export function useCanvasRun(graph: WorkflowGraph, inputs: JsonObject, runs: Stu
       }
     })();
     return () => { live = false; };
-  }, [run, hashes, graphJson, inputsJson, runs, runtime, epoch]);
+  }, [run, hashes, graphJson, inputsJson, runs, inspectCached, epoch]);
 
   const id = run?.id;
   const active = run ? runActive(run.state) : false;

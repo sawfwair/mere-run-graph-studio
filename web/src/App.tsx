@@ -75,7 +75,8 @@ import {
   renameNode,
   saveEditorSelection,
 } from './graph';
-import { loadRecoveredDocument, useDocumentHistory } from './history';
+import { discardRecovery, loadRecoveredDocument, useDocumentHistory } from './history';
+import { useCloseGuard } from './use-close-guard';
 import {
   addAssetInputs,
   deleteElements,
@@ -908,13 +909,13 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setView('canvas');
   };
 
-  const saveProject = useCallback(async (path = projectPath) => {
+  const saveProject = useCallback(async (path = projectPath): Promise<boolean> => {
     if (!path) {
       setSavePath(`workflows/${slug(graph.name)}`);
       saveDialog.current?.showModal();
-      return;
+      return false;
     }
-    if (!beginExclusive('Saving')) return;
+    if (!beginExclusive('Saving')) return false;
     const savedDocument = { graph, inputs, sidecar, program };
     try {
       await runtime.saveProject({ path, ...savedDocument });
@@ -923,12 +924,16 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       setDiagnosticTitle('Saved');
       setDiagnostics([{ severity: 'success', title: 'Project saved', message: path }]);
       pushToast('success', 'Workflow saved', path);
+      return true;
     } catch (error) {
       showError('Save failed', error);
+      return false;
     } finally {
       endExclusive();
     }
   }, [beginExclusive, endExclusive, graph, inputs, markSaved, program, projectPath, pushToast, runtime, showError, sidecar]);
+
+  useCloseGuard({ dirty, save: () => saveProject(), discard: discardRecovery });
 
   const openProjects = async () => {
     try {
