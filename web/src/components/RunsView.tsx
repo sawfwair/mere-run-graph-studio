@@ -93,9 +93,11 @@ function RunList({ runs, selected, onSelect, onRefresh }: Pick<RunsViewProps, 'r
     </div>
     {runs.map((run) => (
       <button className={`run-item ${selected?.id === run.id ? 'selected' : ''}`} onClick={() => onSelect(run.id)} key={run.id}>
-        <span className={`run-state ${run.state}`} />
-        <span><strong>{run.executor}</strong><small>{run.id}</small></span>
-        <time>{new Date(run.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
+        <span className={`run-state ${run.state}`} aria-label={run.state} role="img" />
+        <span className="catalog-copy"><strong>{run.executor}</strong><small>{run.id}</small></span>
+        <span className="run-meta">
+          <time dateTime={run.created_at}>{new Date(run.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
+        </span>
       </button>
     ))}
     {!runs.length ? <div className="empty-state">No runs</div> : null}

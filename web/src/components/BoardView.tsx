@@ -1,23 +1,15 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import { Check, Download, Image as ImageIcon, Trash2, Undo2 } from 'lucide-react';
 import type { EditorBoardItem } from '../types';
+import { mediaKey, useObjectUrl } from '../use-object-url';
 
 type ArtifactLoader = (runId: string, path: string, contentType?: string) => Promise<Blob>;
 
 function BoardMedia({ item, artifactBlob }: { item: EditorBoardItem; artifactBlob: ArtifactLoader }): ReactElement {
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let live = true;
-    let objectUrl: string | null = null;
-    setUrl(null); setFailed(false);
-    void artifactBlob(item.run_id, item.path, item.content_type).then((blob) => {
-      if (!live) return;
-      objectUrl = URL.createObjectURL(blob);
-      setUrl(objectUrl);
-    }).catch(() => { if (live) setFailed(true); });
-    return () => { live = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [artifactBlob, item.content_type, item.path, item.run_id]);
+  const { url, failed } = useObjectUrl(
+    mediaKey(item.run_id, item.path, item.content_type),
+    () => artifactBlob(item.run_id, item.path, item.content_type),
+  );
   if (failed) return <div className="board-unavailable">This run artifact is unavailable on this executor.</div>;
   if (!url) return <div className="board-loading">Loading result…</div>;
   if (item.content_type?.startsWith('image/')) return <img src={url} alt={item.name} />;

@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+# The complexity gate runs Clippy, which links the pinned Sparkle framework on macOS.
+pnpm sparkle:prepare
 node --test scripts/*.test.mjs
 pnpm lint
 ./scripts/complexity.sh --quiet

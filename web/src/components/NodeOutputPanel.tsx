@@ -7,13 +7,14 @@ import type { OutputContext } from '../canvas-execution';
 export type ArtifactLoader = (runId: string, path: string, contentType?: string) => Promise<Blob>;
 
 function useArtifactUrl(preview: NodeRunPreview, item: NodeRunPreviewItem | undefined, load?: ArtifactLoader) {
-  const [url, setUrl] = useState<string | null>(null);
-  const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
   const path = item?.artifact?.path;
   const mime = item?.artifact?.content_type;
+  // Results belong to the request they were loaded for; a new artifact, run
+  // update, or retry starts from a clean state without resetting in an effect.
+  const key = JSON.stringify([preview.runId, path, mime, preview.updatedAt, retry]);
+  const [loaded, setLoaded] = useState<{ key: string; url: string | null; error: boolean }>({ key: '', url: null, error: false });
   useEffect(() => {
-    setUrl(null); setError(false);
     if (!path || !load) return undefined;
     let live = true;
     let objectUrl: string | null = null;
@@ -23,17 +24,19 @@ function useArtifactUrl(preview: NodeRunPreview, item: NodeRunPreviewItem | unde
       try {
         const blob = await load(preview.runId, path, mime);
         if (!live) return;
-        objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); setError(false);
+        objectUrl = URL.createObjectURL(blob);
+        setLoaded({ key, url: objectUrl, error: false });
       } catch {
         if (!live) return;
-        setError(true);
+        setLoaded({ key, url: null, error: true });
         if (attempts++ < 8) timer = window.setTimeout(() => void request(), 2000);
       }
     };
     void request();
     return () => { live = false; window.clearTimeout(timer); if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [path, mime, load, preview.runId, preview.updatedAt, retry]);
-  return { url, error, retry: () => setRetry((value) => value + 1) };
+  }, [key, path, mime, load, preview.runId]);
+  const current = loaded.key === key ? loaded : { url: null, error: false };
+  return { url: current.url, error: current.error, retry: () => setRetry((value) => value + 1) };
 }
 function ArtifactMedia({ item, url }: { item: NodeRunPreviewItem; url: string }) {
   const type = item.artifact?.content_type ?? '';
@@ -100,7 +103,13 @@ function CanvasRunPreview({ preview, artifactBlob, expanded = false, onSave, onU
   const selectedIndex = Math.min(index, preview.items.length - 1);
   const item = preview.items[selectedIndex];
   const media = useArtifactUrl(preview, item, artifactBlob);
-  useEffect(() => { setIndex(0); setOpen(false); }, [preview.runId]);
+  // A new run starts back at its first result with the viewer closed.
+  const [shownRunId, setShownRunId] = useState(preview.runId);
+  if (shownRunId !== preview.runId) {
+    setShownRunId(preview.runId);
+    setIndex(0);
+    setOpen(false);
+  }
   if (!item) return null;
   return <>
     <div className="output-caption">{previewCaption(preview)}</div>

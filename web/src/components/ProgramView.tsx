@@ -1,8 +1,9 @@
-import { useEffect, useState, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import { Boxes, Braces, GitBranch, ListPlus, PlayCircle, Repeat2, Trash2 } from 'lucide-react';
 
 import { addModuleFromSelection, addProgramStep, createProgramFromGraph } from '../program';
 import { parseJsonValue } from '../decode';
+import { useJsonDraft } from '../use-draft';
 import type { CatalogEntry, JsonValue, WorkflowGraph, WorkflowProgram, WorkflowProgramStep } from '../types';
 
 interface ProgramViewProps {
@@ -16,21 +17,16 @@ interface ProgramViewProps {
   onError: (title: string, error: unknown) => void;
 }
 
+const parseProgramJson = (text: string) => parseJsonValue(text, 'program JSON');
+
 function JsonInlineEditor({ value, onChange }: { value: JsonValue; onChange: (value: JsonValue) => void }) {
-  const [text, setText] = useState(() => JSON.stringify(value));
-  const [valid, setValid] = useState(true);
-  useEffect(() => setText(JSON.stringify(value)), [value]);
+  const draft = useJsonDraft(value, parseProgramJson);
   return <input
-    className={valid ? 'json-inline' : 'json-inline invalid'}
-    value={text}
+    className={draft.valid ? 'json-inline' : 'json-inline invalid'}
+    value={draft.text}
     onChange={(event) => {
-      setText(event.target.value);
-      try {
-        onChange(parseJsonValue(event.target.value, 'program JSON'));
-        setValid(true);
-      } catch {
-        setValid(false);
-      }
+      const result = draft.edit(event.target.value);
+      if (result.ok) onChange(result.value);
     }}
   />;
 }

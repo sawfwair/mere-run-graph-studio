@@ -55,7 +55,6 @@ export function useCanvasRun(graph: WorkflowGraph, inputs: JsonObject, runs: Stu
   useEffect(() => {
     if (!id || !active) return undefined;
     const controller = new AbortController();
-    setStreamError(null);
     void runtime.watchRun(id, (update) => {
       if (!controller.signal.aborted) setRun((previous) => mergeRunUpdate(previous, update));
     }, controller.signal).catch(() => {
@@ -102,6 +101,9 @@ export function useCanvasRun(graph: WorkflowGraph, inputs: JsonObject, runs: Stu
       setRun((current) => current?.id === update.id ? mergeRunUpdate(current, update) : current);
     } catch { setStreamError('Cancellation failed. Reconnect to check the run, then try again.'); }
   }, [run, runtime]);
-  const reconnect = useCallback(() => setWatchVersion((value) => value + 1), []);
+  const reconnect = useCallback(() => {
+    setStreamError(null);
+    setWatchVersion((value) => value + 1);
+  }, []);
   return { runId: id, run, matchingRun: matches ? run : null, active, matches, previews, execution, pins, pin, unpin, track, reset, cancel, streamError, reconnect };
 }

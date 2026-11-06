@@ -14,6 +14,7 @@ import {
   type NodeMouseHandler,
   type OnMove,
   type OnNodesChange,
+  type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -28,8 +29,6 @@ import {
   connectGraphOutput,
   connectNodeOutput,
   connectOrderingDependency,
-  disconnectNodeInput,
-  disconnectOrderingDependency,
   EDITOR_COLUMN_SPACING,
   EDITOR_ROW_SPACING,
   editorGroupName,
@@ -52,6 +51,7 @@ import {
 import { portTypeKey, type StudioMode } from '../ui';
 import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { NodeExecutionState } from '../canvas-execution';
+import type { DeleteRequest, EdgeRemoval } from '../document-edits';
 import type { CatalogEntry, EditorSidecar, JsonObject, WorkflowGraph } from '../types';
 import { EditorGroupNode, type EditorGroupFlowNode } from './EditorGroupNode';
 import { EditorNoteNode, type EditorNoteFlowNode } from './EditorNoteNode';
@@ -96,10 +96,11 @@ interface GraphCanvasProps {
   onSelectInput: (name: string | null) => void;
   onSelectOutput: (name: string | null) => void;
   onSelectEditorItem: (id: string | null) => void;
-  onDeleteNodes: (ids: string[]) => void;
-  onDeleteInputs: (names: string[]) => void;
-  onDeleteOutputs: (names: string[]) => void;
-  onDeleteEditorItems: (ids: string[]) => void;
+  /** One canvas deletion (Delete key or toolbar), applied as a single edit. */
+  onDeleteElements: (request: DeleteRequest) => void;
+  /** Final positions of every element moved by one drag gesture. */
+  onMoveElements: (moved: { id: string; position: CanvasPosition }[]) => void;
+  onViewportChange: (viewport: Viewport) => void;
   onDropNode: (entry: CatalogEntry, position: CanvasPosition) => void;
   onDropPreset: (id: string, position: CanvasPosition) => void;
   onDropFiles: (paths: string[], position: CanvasPosition) => void;
@@ -137,6 +138,47 @@ function graphEdgeData(value: unknown): GraphEdgeData | undefined {
     targetNodeId,
     targetInput,
   };
+}
+
+function referenceRemoval(data: GraphEdgeData): EdgeRemoval | null {
+  if (!data.targetNodeId) return null;
+  if (data.kind === 'order') return { kind: 'order', sourceNodeId: data.sourceNodeId, targetNodeId: data.targetNodeId };
+  return data.targetInput ? { kind: 'data', targetNodeId: data.targetNodeId, targetInput: data.targetInput } : null;
+}
+
+function edgeRemoval(edge: Edge): EdgeRemoval | null {
+  const data = graphEdgeData(edge.data);
+  if (!data) return null;
+  if (data.kind !== 'output') return referenceRemoval(data);
+  const outputName = graphOutputName(edge.target);
+  return outputName ? { kind: 'output', outputName } : null;
+}
+
+function presentNames(ids: readonly string[], name: (id: string) => string | null): string[] {
+  return ids.map(name).filter((value): value is string => Boolean(value));
+}
+
+function deleteRequest(nodes: readonly StudioFlowNode[], edges: readonly Edge[]): DeleteRequest {
+  const ids = nodes.map((node) => node.id);
+  return {
+    nodeIds: nodes.filter((node) => node.type === 'workflow').map((node) => node.id),
+    inputNames: presentNames(ids, graphInputName),
+    outputNames: presentNames(ids, graphOutputName),
+    editorIds: nodes.filter((node) => node.type === 'editor-group' || node.type === 'editor-note').map((node) => node.id),
+    edges: edges.map(edgeRemoval).filter((removal): removal is EdgeRemoval => removal !== null),
+  };
+}
+
+function mergeDerivedNodes(current: StudioFlowNode[], derived: StudioFlowNode[]): StudioFlowNode[] {
+  const previous = new Map(current.map((node) => [node.id, node]));
+  return derived.map((node) => {
+    const prior = previous.get(node.id);
+    // Catalog arrival can add handles without changing the card size.
+    // Let React Flow measure those handles again; preserve measurements
+    // for data-only updates so output events do not reobserve every node.
+    if (node.type === 'workflow' && prior?.type === 'workflow' && prior.data.entry !== node.data.entry) return node;
+    return { ...prior, ...node };
+  });
 }
 
 const nodeTypes = {
@@ -341,10 +383,9 @@ export function GraphCanvas({
   onSelectInput,
   onSelectOutput,
   onSelectEditorItem,
-  onDeleteNodes,
-  onDeleteInputs,
-  onDeleteOutputs,
-  onDeleteEditorItems,
+  onDeleteElements,
+  onMoveElements,
+  onViewportChange,
   onDropNode,
   onDropPreset,
   onDropFiles,
@@ -519,19 +560,11 @@ export function GraphCanvas({
   // select on click), and resync it whenever the derived nodes change — node
   // drags are still persisted to the sidecar on drag-stop.
   const [nodes, setNodes] = useState<StudioFlowNode[]>(derivedNodes);
-  useEffect(() => {
-    setNodes((current) => {
-      const previous = new Map(current.map((node) => [node.id, node]));
-      return derivedNodes.map((node) => {
-        const prior = previous.get(node.id);
-        // Catalog arrival can add handles without changing the card size.
-        // Let React Flow measure those handles again; preserve measurements
-        // for data-only updates so output events do not reobserve every node.
-        if (node.type === 'workflow' && prior?.type === 'workflow' && prior.data.entry !== node.data.entry) return node;
-        return { ...prior, ...node };
-      });
-    });
-  }, [derivedNodes]);
+  const [syncedNodes, setSyncedNodes] = useState(derivedNodes);
+  if (syncedNodes !== derivedNodes) {
+    setSyncedNodes(derivedNodes);
+    setNodes((current) => mergeDerivedNodes(current, derivedNodes));
+  }
   const onNodesChange = useCallback<OnNodesChange<StudioFlowNode>>(
     (changes) => setNodes((current) => applyNodeChanges(changes, current)),
     [],
@@ -622,10 +655,7 @@ export function GraphCanvas({
     [onSelectEditorItem, onSelectInput, onSelectNodes, onSelectOutput, selectedNodeIds],
   );
 
-  const moveEnd: OnMove = useCallback(
-    (_event, viewport) => onSidecarChange({ ...sidecar, viewport }),
-    [onSidecarChange, sidecar],
-  );
+  const moveEnd: OnMove = useCallback((_event, viewport) => onViewportChange(viewport), [onViewportChange]);
 
   const paneClick = useCallback(
     (event: MouseEvent) => {
@@ -727,50 +757,10 @@ export function GraphCanvas({
       isValidConnection={validConnection}
       onNodeClick={selectNode}
       onPaneClick={paneClick}
-      onNodeDragStop={(_event, node) => {
-        const outputName = graphOutputName(node.id);
-        const inputName = graphInputName(node.id);
-        const groupName = editorGroupName(node.id);
-        const noteName = editorNoteName(node.id);
-        if (outputName) {
-          onSidecarChange({ ...sidecar, outputs: { ...sidecar.outputs, [outputName]: node.position } });
-        } else if (inputName) {
-          onSidecarChange({ ...sidecar, inputs: { ...sidecar.inputs, [inputName]: node.position } });
-        } else if (groupName) {
-          const value = sidecar.groups?.[groupName];
-          if (value) onSidecarChange({ ...sidecar, groups: { ...sidecar.groups, [groupName]: { ...value, ...node.position } } });
-        } else if (noteName) {
-          const value = sidecar.notes?.[noteName];
-          if (value) onSidecarChange({ ...sidecar, notes: { ...sidecar.notes, [noteName]: { ...value, ...node.position } } });
-        } else {
-          onSidecarChange({ ...sidecar, nodes: { ...sidecar.nodes, [node.id]: node.position } });
-        }
+      onNodeDragStop={(_event, _node, dragged) => {
+        onMoveElements(dragged.map((node) => ({ id: node.id, position: node.position })));
       }}
-      onNodesDelete={(deleted) => {
-        const nodeIds = deleted.filter((node) => node.type === 'workflow').map((node) => node.id);
-        const inputNames = deleted.map((node) => graphInputName(node.id)).filter((name): name is string => Boolean(name));
-        const outputNames = deleted.map((node) => graphOutputName(node.id)).filter((name): name is string => Boolean(name));
-        const editorIds = deleted.filter((node) => node.type === 'editor-group' || node.type === 'editor-note').map((node) => node.id);
-        if (nodeIds.length) onDeleteNodes(nodeIds);
-        if (inputNames.length) onDeleteInputs(inputNames);
-        if (outputNames.length) onDeleteOutputs(outputNames);
-        if (editorIds.length) onDeleteEditorItems(editorIds);
-      }}
-      onEdgesDelete={(deleted) => {
-        let next = graph;
-        for (const edge of deleted) {
-          const data = graphEdgeData(edge.data);
-          if (data?.kind === 'data' && data.targetNodeId && data.targetInput) {
-            next = disconnectNodeInput(next, data.targetNodeId, data.targetInput);
-          } else if (data?.kind === 'order' && data.targetNodeId) {
-            next = disconnectOrderingDependency(next, data.sourceNodeId, data.targetNodeId);
-          } else if (data?.kind === 'output') {
-            const outputName = graphOutputName(edge.target);
-            if (outputName) onDeleteOutputs([outputName]);
-          }
-        }
-        if (next !== graph) onGraphChange(next);
-      }}
+      onDelete={({ nodes: deletedNodes, edges: deletedEdges }) => onDeleteElements(deleteRequest(deletedNodes, deletedEdges))}
       onMoveEnd={moveEnd}
       onDragOver={(event) => {
         if (event.dataTransfer.types.includes(NODE_DRAG_TYPE) || event.dataTransfer.types.includes(PRESET_DRAG_TYPE)) {

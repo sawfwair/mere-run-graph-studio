@@ -1638,7 +1638,7 @@ input[type='range']::-moz-range-thumb { width: 12px; height: 12px; border: 2px s
   padding: 0 4px;
   font-size: 11px;
 }
-.run-item { position: relative; grid-template-columns: 10px minmax(0, 1fr); gap: 9px; min-height: 52px; margin-bottom: 3px; padding: 7px 9px; border: 1px solid transparent; }
+.run-item { position: relative; grid-template-columns: 10px minmax(0, 1fr); gap: 9px; min-height: 52px; margin-bottom: 3px; padding: 7px 60px 7px 9px; border: 1px solid transparent; }
 .run-item.selected { border-color: var(--line-strong); background: var(--surface-hover); }
 .run-item .catalog-copy small { font-family: var(--mono); font-size: 9px; }
 .run-meta { position: absolute; top: 8px; right: 9px; display: flex; align-items: center; gap: 6px; }

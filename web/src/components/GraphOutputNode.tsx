@@ -18,6 +18,7 @@ function GraphOutputNodeView({ data, selected }: NodeProps<GraphOutputFlowNode>)
     <article
       className={`graph-output-node ${selected ? 'selected' : ''}`}
       role="button"
+      aria-label={`Edit workflow output ${data.name}`}
       tabIndex={0}
       onClick={(event) => {
         event.stopPropagation();

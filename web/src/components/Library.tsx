@@ -85,6 +85,19 @@ function SavedPresets({ presets, onAddPreset, onRemovePreset }: Pick<LibraryProp
   </div>;
 }
 
+function libraryTab(picked: LibraryTab | null, mode: StudioMode, hasTemplates: boolean): LibraryTab {
+  if (picked) return picked;
+  return mode === 'easy' && hasTemplates ? 'templates' : 'nodes';
+}
+
+function focusInput(input: HTMLInputElement | null): void {
+  input?.focus();
+}
+
+function searchVisible(collapsed: boolean, tab: LibraryTab): boolean {
+  return !collapsed && tab === 'nodes';
+}
+
 export function Library({
   catalog,
   graph,
@@ -103,33 +116,34 @@ export function Library({
   onAddPreset,
   onRemovePreset,
 }: LibraryProps): ReactElement {
-  const [tab, setTab] = useState<LibraryTab>('nodes');
+  // Until the user picks a tab, follow the mode: Easy opens on templates when
+  // there are any, Pro on nodes.
+  const [pickedTab, setPickedTab] = useState<LibraryTab | null>(null);
+  const tab = libraryTab(pickedTab, mode, templates.length > 0);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<CategoryKey | 'all'>('all');
-  const userPicked = useRef(false);
   const searchInput = useRef<HTMLInputElement>(null);
-  const [focusSearchIntent, setFocusSearchIntent] = useState(false);
-
-  useEffect(() => {
-    if (userPicked.current) return;
-    setTab(mode === 'easy' && templates.length ? 'templates' : 'nodes');
-  }, [mode, templates.length]);
+  const focusSearchIntent = useRef(false);
 
   // When search is opened from the collapsed rail, focus the field once the
   // panel has expanded onto the Nodes tab.
   useEffect(() => {
-    if (focusSearchIntent && !collapsed && tab === 'nodes') {
-      searchInput.current?.focus();
-      setFocusSearchIntent(false);
+    if (focusSearchIntent.current && searchVisible(collapsed, tab)) {
+      focusSearchIntent.current = false;
+      focusInput(searchInput.current);
     }
-  }, [focusSearchIntent, collapsed, tab]);
+  }, [collapsed, tab]);
 
-  const openSearch = () => { pickTab('nodes'); onCollapsedChange(false); setFocusSearchIntent(true); };
-
-  const pickTab = (next: LibraryTab) => {
-    userPicked.current = true;
-    setTab(next);
+  const openSearch = () => {
+    pickTab('nodes');
+    onCollapsedChange(false);
+    // Already showing the search field: no tab or rail change will re-run the
+    // focus effect, so focus it now.
+    if (searchVisible(collapsed, tab)) focusInput(searchInput.current);
+    else focusSearchIntent.current = true;
   };
+
+  const pickTab = (next: LibraryTab) => setPickedTab(next);
 
   const groups = useMemo(() => {
     const normalized = query.trim().toLowerCase();
