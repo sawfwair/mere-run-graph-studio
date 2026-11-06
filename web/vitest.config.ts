@@ -14,6 +14,7 @@ export default defineConfig({
         'src/graph.ts',
         'src/model-install.ts',
         'src/models.ts',
+        'src/node-data.ts',
         'src/program.ts',
         'src/run-preview.ts',
         'src/ui.ts',

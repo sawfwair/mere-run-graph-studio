@@ -36,7 +36,7 @@ import type {
   WorkflowGraph,
   WorkflowProgram,
 } from './types';
-import { pollModelPull, type ImportedAsset, type StudioRuntime } from './runtime';
+import { pollModelPull, pollRun, type ImportedAsset, type StudioRuntime } from './runtime';
 
 export interface SharedAppVersion {
   token: string;
@@ -556,16 +556,9 @@ export class CloudRuntime implements StudioRuntime {
     return studioRun(run, events, manifest);
   }
 
-  async watchRun(id: string, onRun: (run: StudioRun) => void, signal: AbortSignal): Promise<void> {
-    while (!signal.aborted) {
-      const run = await this.inspectRun(id);
-      onRun(run);
-      if (['finished', 'failed', 'cancelled'].includes(run.state)) return;
-      await new Promise<void>((resolve) => {
-        const timeout = window.setTimeout(resolve, 800);
-        signal.addEventListener('abort', () => { window.clearTimeout(timeout); resolve(); }, { once: true });
-      });
-    }
+  watchRun(id: string, onRun: (run: StudioRun) => void, signal: AbortSignal): Promise<void> {
+    // Each hosted poll is three requests (run, events, manifest).
+    return pollRun(() => this.inspectRun(id), onRun, signal, { fastMs: 800, slowMs: 4000 });
   }
 
   async cancelRun(id: string): Promise<StudioRun> {
