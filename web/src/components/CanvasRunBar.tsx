@@ -37,12 +37,19 @@ export function NodeExecution({ execution }: { execution?: NodeExecutionState })
   </section>;
 }
 
+function cancelRequestKey(run: StudioRun | null, error: string | null): string {
+  return JSON.stringify([run?.id, run?.state, error]);
+}
+
 export function CanvasRunBar({ run, previous, error, onCancel, onReconnect, onDetails }: {
   run: StudioRun | null; previous: boolean; error: string | null;
   onCancel: () => Promise<void>; onReconnect: () => void; onDetails: () => void;
 }): ReactElement | null {
-  const [cancelling, setCancelling] = useState(false);
-  useEffect(() => setCancelling(false), [run?.id, run?.state, error]);
+  // A cancel request belongs to the run state it was made in; any new state or
+  // error re-enables the button without an effect resetting it.
+  const cancelKey = cancelRequestKey(run, error);
+  const [cancellingKey, setCancellingKey] = useState<string | null>(null);
+  const cancelling = cancellingKey === cancelKey;
   if (!run) return null;
   const active = runActive(run.state);
   return <div className={`canvas-run-bar execution-${run.state}`} role="region" aria-label="Canvas run">
@@ -52,7 +59,7 @@ export function CanvasRunBar({ run, previous, error, onCancel, onReconnect, onDe
     </div>
     <div className="canvas-run-actions">
       <button onClick={onDetails}>Run details</button>
-      {active ? <button disabled={cancelling} onClick={() => { setCancelling(true); void onCancel().finally(() => setCancelling(false)); }}><Square size={11} />{cancelling ? 'Cancelling' : 'Cancel run'}</button> : null}
+      {active ? <button disabled={cancelling} onClick={() => { setCancellingKey(cancelKey); void onCancel().finally(() => setCancellingKey(null)); }}><Square size={11} />{cancelling ? 'Cancelling' : 'Cancel run'}</button> : null}
     </div>
     {error ? <div className="canvas-stream-error" role="status">{error} <button onClick={onReconnect}>Reconnect</button></div> : null}
   </div>;

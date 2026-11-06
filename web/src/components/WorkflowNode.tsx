@@ -10,6 +10,7 @@ import {
   ORDER_OUTPUT_HANDLE,
 } from '../graph';
 import { parseJsonValue } from '../decode';
+import { useJsonDraft } from '../use-draft';
 import { candidateModels, modelFieldFor } from '../models';
 import { fieldChoices } from '../field-choices';
 import { FiniteSelect } from './FiniteSelect';
@@ -200,16 +201,34 @@ function StructuredMaterialEditor({ field, value, current, onArgumentChange }: M
     );
   }
   return (
+    <MaterialJsonField
+      label={`${friendlyLabel(field.name)} for ${value.id}`}
+      value={current ?? {}}
+      onCommit={(next) => onArgumentChange(field.name, next)}
+    />
+  );
+}
+
+const parseNodeArgumentJson = (text: string) => parseJsonValue(text, 'node argument JSON');
+
+/**
+ * Commits on blur (one undo step per edit), but stays controlled so undo or an
+ * Inspector edit replaces the text instead of being overwritten on the next blur.
+ */
+function MaterialJsonField({ label, value, onCommit }: { label: string; value: JsonValue; onCommit: (value: JsonValue) => void }) {
+  const draft = useJsonDraft(value, parseNodeArgumentJson, 2);
+  return (
     <textarea
-      className={materialInputClass} aria-label={`${friendlyLabel(field.name)} for ${value.id}`}
+      className={`${materialInputClass}${draft.valid ? '' : ' invalid'}`}
+      aria-label={label}
+      aria-invalid={!draft.valid}
       rows={3}
-      defaultValue={JSON.stringify(current ?? {}, null, 2)}
+      value={draft.text}
+      onChange={(event) => { draft.edit(event.target.value); }}
       onBlur={(event) => {
-        try {
-          onArgumentChange(field.name, parseJsonValue(event.target.value, 'node argument JSON'));
-        } catch {
-          // Keep the last valid document; the full inspector reports malformed JSON.
-        }
+        // Keep the last valid document; the full inspector reports malformed JSON.
+        const result = draft.edit(event.target.value);
+        if (result.ok) onCommit(result.value);
       }}
     />
   );

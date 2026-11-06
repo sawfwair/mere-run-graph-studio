@@ -23,6 +23,12 @@ function PluginRows({ plugins, busy, onPlan }: { plugins: Plugin[]; busy: boolea
   </div>)}</div>;
 }
 
+async function readPlugins(runtime: SetupRuntime): Promise<Plugin[]> {
+  const document = await runtime.plugins();
+  if (document.exit_code !== 0) throw Error(document.stderr || 'Could not read plugin catalog');
+  return setupPlugins(document.result);
+}
+
 export function DesktopTools({ runtime, status, onStatus }: { runtime: SetupRuntime; status: DesktopStatus; onStatus: (status: DesktopStatus) => void }): ReactElement {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [plan, setPlan] = useState<{ id: string; text: string } | null>(null);
@@ -31,13 +37,21 @@ export function DesktopTools({ runtime, status, onStatus }: { runtime: SetupRunt
   const [verification, setVerification] = useState<JsonObject | null>(null);
 
   const loadPlugins = useCallback(async () => {
-    const document = await runtime.plugins();
-    if (document.exit_code !== 0) throw Error(document.stderr || 'Could not read plugin catalog');
-    setPlugins(setupPlugins(document.result));
+    setPlugins(await readPlugins(runtime));
   }, [runtime]);
   useEffect(() => {
-    if (status.mere_run.available) void loadPlugins().catch((reason: unknown) => setError(String(reason)));
-  }, [loadPlugins, status.mere_run.path, status.mere_run.available]);
+    if (!status.mere_run.available) return undefined;
+    let live = true;
+    void (async () => {
+      try {
+        const next = await readPlugins(runtime);
+        if (live) setPlugins(next);
+      } catch (reason) {
+        if (live) setError(String(reason));
+      }
+    })();
+    return () => { live = false; };
+  }, [runtime, status.mere_run.path, status.mere_run.available]);
 
   const action = async (label: string, operation: () => Promise<void>) => {
     setBusy(label); setError(null);

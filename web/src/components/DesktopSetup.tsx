@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement, type ReactNode } from 'react';
+import { useState, type ReactElement, type ReactNode } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { CheckCircle2, FolderOpen, HardDrive, Network, TerminalSquare, X } from 'lucide-react';
 
@@ -77,11 +77,14 @@ export function DesktopSetup({ status, settings = false, saving, error, onSave, 
   const [mereRun, setMereRun] = useState(status.mere_run.path ?? '');
   const [workflowTools, setWorkflowTools] = useState(status.workflow_tools.path ?? '');
 
-  useEffect(() => {
+  // A new status from the host (after save or re-detection) replaces the fields.
+  const [shownStatus, setShownStatus] = useState(status);
+  if (shownStatus !== status) {
+    setShownStatus(status);
     setWorkspace(status.workspace);
     setMereRun(status.mere_run.path ?? '');
     setWorkflowTools(status.workflow_tools.path ?? '');
-  }, [status]);
+  }
 
   const chooseWorkspace = async () => {
     const selected = await open({ directory: true, multiple: false, title: 'Choose a Graph Studio workspace' });

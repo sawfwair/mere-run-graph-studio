@@ -1,20 +1,30 @@
 version: 2
+
+# Tauri ships matching npm packages and Rust crates, and `tauri build` rejects
+# mismatched major/minor versions. Updating npm and Cargo in one pull request
+# keeps @tauri-apps/* and tauri-* moving together.
+multi-ecosystem-groups:
+  app-dependencies:
+    schedule:
+      interval: weekly
+
 updates:
   - package-ecosystem: npm
     directory: /
-    schedule:
-      interval: weekly
-    groups:
-      frontend-and-tooling:
-        patterns: ["*"]
+    patterns: ["*"]
+    multi-ecosystem-group: app-dependencies
+    ignore:
+      # @cloudflare/vitest-pool-workers (the Worker test pool) peers on
+      # vitest ^4. Take vitest majors only once a pool release supports them.
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: cargo
     directory: /src-tauri
-    schedule:
-      interval: weekly
-    groups:
-      native-host:
-        patterns: ["*"]
+    patterns: ["*"]
+    multi-ecosystem-group: app-dependencies
 
   - package-ecosystem: github-actions
     directory: /

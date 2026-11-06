@@ -66,14 +66,14 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
-    "@vitest/coverage-istanbul": "5.0.5",
-    "@vitest/coverage-v8": "5.0.5",
+    "@vitest/coverage-istanbul": "4.1.12",
+    "@vitest/coverage-v8": "4.1.12",
     "oxlint": "1.89.0",
     "oxlint-tsgolint": "7.0.2005",
     "playwright": "^1.64.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
-    "vitest": "5.0.5",
+    "vitest": "4.1.12",
     "wrangler": "^4.152.0"
   },
   "pnpm": {

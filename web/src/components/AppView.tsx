@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
@@ -39,6 +39,7 @@ import { FieldChoiceEditor } from './FieldChoiceEditor';
 import { NumberPresetEditor } from './NumberPresetEditor';
 import type { NodeRunPreviewItem } from '../run-preview';
 import type { EditorAppConfig, EditorSidecar, JsonObject, JsonValue, StudioRun, WorkflowGraph } from '../types';
+import { mediaKey, useObjectUrl } from '../use-object-url';
 
 export interface AppVariation {
   label: string;
@@ -96,27 +97,9 @@ function ArtifactMedia({ runId, item, load, large, onOpen }: {
   large?: boolean;
   onOpen?: () => void;
 }) {
-  const [url, setUrl] = useState<string | null>(null);
   const artifact = item.artifact;
   const contentType = artifact?.content_type ?? (artifact ? mediaType(artifact.path) : undefined);
-
-  useEffect(() => {
-    setUrl(null);
-    if (!artifact) return undefined;
-    let live = true;
-    let objectUrl: string | null = null;
-    void load(runId, artifact.path, contentType).then((blob) => {
-      if (!live) return;
-      objectUrl = URL.createObjectURL(blob);
-      setUrl(objectUrl);
-    }).catch(() => {
-      if (live) setUrl(null);
-    });
-    return () => {
-      live = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [artifact, contentType, load, runId]);
+  const { url } = useRunArtifactUrl(runId, artifact, contentType, load);
 
   if (item.value !== undefined) {
     const text = typeof item.value === 'string' ? item.value : JSON.stringify(item.value, null, large ? 2 : undefined);
@@ -134,20 +117,22 @@ function ArtifactMedia({ runId, item, load, large, onOpen }: {
   return <a className="app-media-file" href={url} download={artifact.name}><ImageIcon size={15} /> {artifact.name}</a>;
 }
 
+function useRunArtifactUrl(
+  runId: string,
+  artifact: NodeRunPreviewItem['artifact'],
+  contentType: string | undefined,
+  load: (runId: string, path: string, contentType?: string) => Promise<Blob>,
+) {
+  const path = artifact?.path;
+  return useObjectUrl(
+    path ? mediaKey(runId, path, contentType) : null,
+    () => (path ? load(runId, path, contentType) : Promise.reject(new Error('No artifact'))),
+  );
+}
+
 function AssetPreview({ path, load }: { path: string; load: (path: string, contentType?: string) => Promise<Blob> }) {
-  const [url, setUrl] = useState<string | null>(null);
   const contentType = mediaType(path);
-  useEffect(() => {
-    if (!contentType) return undefined;
-    let live = true;
-    let objectUrl: string | null = null;
-    void load(path, contentType).then((blob) => {
-      if (!live) return;
-      objectUrl = URL.createObjectURL(blob);
-      setUrl(objectUrl);
-    }).catch(() => { if (live) setUrl(null); });
-    return () => { live = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [contentType, load, path]);
+  const { url } = useObjectUrl(contentType ? mediaKey(path, contentType) : null, () => load(path, contentType));
   const filename = path.split('/').at(-1);
   return (
     <div className="app-asset-preview">
@@ -393,14 +378,15 @@ export function AppView(props: AppViewProps): ReactElement {
   const outputs = useMemo(() => outputResults(graph, latestRun), [graph, latestRun]);
   const candidates = useMemo(() => variationCandidates(graph), [graph]);
   const [showSettings, setShowSettings] = useState(false);
-  const [sweepName, setSweepName] = useState<string>('');
+  const [sweepChoice, setSweepName] = useState<string>('');
   const [sweepCount, setSweepCount] = useState(6);
   const [lightbox, setLightbox] = useState<Lightbox | null>(null);
 
-  useEffect(() => {
-    const preferred = defaultVariationField(graph);
-    setSweepName((current) => (candidates.some((candidate) => candidate.name === current) ? current : preferred?.name ?? ''));
-  }, [candidates, graph]);
+  // Keep the chosen sweep field while it still exists; otherwise fall back to
+  // the graph's preferred field.
+  const sweepName = candidates.some((candidate) => candidate.name === sweepChoice)
+    ? sweepChoice
+    : defaultVariationField(graph)?.name ?? '';
 
   const setValue = (name: string, value: JsonValue | undefined) => onInputsChange(value === undefined
     ? Object.fromEntries(Object.entries(inputs).filter(([key]) => key !== name))

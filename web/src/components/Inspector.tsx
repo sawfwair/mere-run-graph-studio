@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react';
+import { useMemo, useState, type ReactElement, type ReactNode } from 'react';
 import {
   Braces,
   ChevronDown,
@@ -34,6 +34,7 @@ import {
   schemaFieldType,
 } from '../graph';
 import { decodeFieldType, parseJsonValue } from '../decode';
+import { useJsonDraft } from '../use-draft';
 import { candidateModels, modelFieldFor } from '../models';
 import { fieldChoices, numberPresets } from '../field-choices';
 import { FiniteSelect } from './FiniteSelect';
@@ -134,23 +135,18 @@ function referenceOptions(
   return options;
 }
 
+const parseInspectorJson = (text: string) => parseJsonValue(text, 'inspector JSON');
+
 function JsonEditor({ value, onChange }: { value: JsonValue; onChange: (value: JsonValue) => void }) {
-  const [text, setText] = useState(() => JSON.stringify(value, null, 2));
-  const [valid, setValid] = useState(true);
-  useEffect(() => setText(JSON.stringify(value, null, 2)), [value]);
+  const draft = useJsonDraft(value, parseInspectorJson, 2);
   return (
     <textarea
-      className={valid ? '' : 'invalid'}
-      value={text}
+      className={draft.valid ? '' : 'invalid'}
+      value={draft.text}
       rows={5}
       onChange={(event) => {
-        setText(event.target.value);
-        try {
-          onChange(parseJsonValue(event.target.value, 'inspector JSON'));
-          setValid(true);
-        } catch {
-          setValid(false);
-        }
+        const result = draft.edit(event.target.value);
+        if (result.ok) onChange(result.value);
       }}
     />
   );
@@ -710,10 +706,9 @@ function NodeInspector({ graph, catalog, availableModels, node, mode, onUpdateNo
   'graph' | 'catalog' | 'availableModels' | 'mode' | 'onUpdateNode' | 'onPromoteArgument' | 'onInlineMaterial' | 'onRenameNode' | 'onDeleteNode' | 'onAddOutput'
 > & { node: WorkflowNode }) {
   const entry = catalogEntryFor(node, catalog);
+  // Keyed by node id at the call site, so these start fresh for each node.
   const [nodeId, setNodeId] = useState(node.id);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  useEffect(() => setNodeId(node.id), [node.id]);
-  useEffect(() => setShowAdvanced(false), [node.id]);
   const { primary, advanced } = splitFieldsForMode(entry?.inputs ?? [], mode);
   const updateArgument: UpdateArgument = (name, value) => {
     if (value === undefined) {
@@ -749,8 +744,8 @@ function OutputInspector({
 }: Pick<InspectorProps, 'graph' | 'catalog' | 'onGraphChange' | 'onRenameOutput' | 'onDeleteOutput'> & {
   name: string;
 }) {
+  // Keyed by output name at the call site, so the draft starts fresh.
   const [outputName, setOutputName] = useState(name);
-  useEffect(() => setOutputName(name), [name]);
   const reference = graph.outputs[name];
   if (!reference) return null;
   const options: ReferenceOption[] = [];
@@ -799,8 +794,8 @@ function InputInspector({
   name: string;
 }) {
   const definition = graph.inputs[name];
+  // Keyed by input name at the call site, so the draft starts fresh.
   const [inputName, setInputName] = useState(name);
-  useEffect(() => setInputName(name), [name]);
   if (!definition) return null;
   const setDefinition = (update: Partial<typeof definition>) =>
     onGraphChange({ ...graph, inputs: { ...graph.inputs, [name]: { ...definition, ...update } } });
@@ -1051,7 +1046,7 @@ function InspectorContent({ props, node }: { props: InspectorProps; node: Workfl
   if (node) return <NodeInspector key={node.id} {...props} node={node} />;
   if (props.selectedNodeIds.length > 1) return <MultiSelectionInspector selectedNodeIds={props.selectedNodeIds} />;
   if (props.selectedInputName) return <InputInspector key={props.selectedInputName} {...props} name={props.selectedInputName} />;
-  if (props.selectedOutputName) return <OutputInspector {...props} name={props.selectedOutputName} />;
+  if (props.selectedOutputName) return <OutputInspector key={props.selectedOutputName} {...props} name={props.selectedOutputName} />;
   if (props.selectedEditorItemId) return <EditorItemInspector {...props} itemId={props.selectedEditorItemId} />;
   return <GraphInspector {...props} />;
 }

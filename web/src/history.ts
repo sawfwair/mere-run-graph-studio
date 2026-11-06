@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { StudioDocument } from './types';
 import { decodeStudioDocument, parseJsonValue } from './decode';
@@ -6,7 +6,7 @@ import { decodeStudioDocument, parseJsonValue } from './decode';
 const RECOVERY_KEY = 'mere.graph-studio.recovery.v1';
 const HISTORY_LIMIT = 100;
 
-interface DocumentHistory {
+export interface DocumentHistory {
   past: StudioDocument[];
   present: StudioDocument;
   future: StudioDocument[];
@@ -16,6 +16,8 @@ interface DocumentHistory {
 export interface DocumentHistoryController {
   document: StudioDocument;
   commit: (update: StudioDocument | ((current: StudioDocument) => StudioDocument)) => void;
+  /** The most recently rendered document, for handlers that resume after an await. */
+  latest: () => StudioDocument;
   replace: (document: StudioDocument, saved: boolean) => void;
   markSaved: (savedDocument?: StudioDocument) => void;
   undo: () => void;
@@ -25,8 +27,51 @@ export interface DocumentHistoryController {
   dirty: boolean;
 }
 
-function documentKey(document: StudioDocument): string {
-  return JSON.stringify(document);
+// The viewport is where the user is looking, not an edit: panning or zooming
+// must not create an undo step or mark the document unsaved. It is still
+// stored in the sidecar so the next save and recovery restore the view.
+export function documentKey(document: StudioDocument): string {
+  const { viewport: _viewport, ...sidecar } = document.sidecar;
+  return JSON.stringify({ ...document, sidecar });
+}
+
+function withViewport(document: StudioDocument, source: StudioDocument): StudioDocument {
+  return document.sidecar.viewport === source.sidecar.viewport
+    ? document
+    : { ...document, sidecar: { ...document.sidecar, viewport: source.sidecar.viewport } };
+}
+
+export function commitHistory(current: DocumentHistory, next: StudioDocument): DocumentHistory {
+  if (next === current.present) return current;
+  if (documentKey(next) === documentKey(current.present)) return { ...current, present: next };
+  return {
+    past: [...current.past, current.present].slice(-HISTORY_LIMIT),
+    present: next,
+    future: [],
+    savedKey: current.savedKey,
+  };
+}
+
+export function undoHistory(current: DocumentHistory): DocumentHistory {
+  const previous = current.past.at(-1);
+  if (!previous) return current;
+  return {
+    past: current.past.slice(0, -1),
+    present: withViewport(previous, current.present),
+    future: [current.present, ...current.future],
+    savedKey: current.savedKey,
+  };
+}
+
+export function redoHistory(current: DocumentHistory): DocumentHistory {
+  const next = current.future[0];
+  if (!next) return current;
+  return {
+    past: [...current.past, current.present].slice(-HISTORY_LIMIT),
+    present: withViewport(next, current.present),
+    future: current.future.slice(1),
+    savedKey: current.savedKey,
+  };
 }
 
 export function loadRecoveredDocument(): StudioDocument | null {
@@ -50,17 +95,13 @@ export function useDocumentHistory(initial: StudioDocument, initialSaved: boolea
   const dirty = presentKey !== history.savedKey;
 
   const commit = useCallback((update: StudioDocument | ((current: StudioDocument) => StudioDocument)) => {
-    setHistory((current) => {
-      const next = typeof update === 'function' ? update(current.present) : update;
-      if (documentKey(next) === documentKey(current.present)) return current;
-      return {
-        past: [...current.past, current.present].slice(-HISTORY_LIMIT),
-        present: next,
-        future: [],
-        savedKey: current.savedKey,
-      };
-    });
+    setHistory((current) => commitHistory(current, typeof update === 'function' ? update(current.present) : update));
   }, []);
+  const latestDocument = useRef(history.present);
+  useEffect(() => {
+    latestDocument.current = history.present;
+  }, [history.present]);
+  const latest = useCallback(() => latestDocument.current, []);
 
   const replace = useCallback((document: StudioDocument, saved: boolean) => {
     setHistory({
@@ -78,31 +119,8 @@ export function useDocumentHistory(initial: StudioDocument, initialSaved: boolea
     }));
   }, []);
 
-  const undo = useCallback(() => {
-    setHistory((current) => {
-      const previous = current.past.at(-1);
-      if (!previous) return current;
-      return {
-        past: current.past.slice(0, -1),
-        present: previous,
-        future: [current.present, ...current.future],
-        savedKey: current.savedKey,
-      };
-    });
-  }, []);
-
-  const redo = useCallback(() => {
-    setHistory((current) => {
-      const next = current.future[0];
-      if (!next) return current;
-      return {
-        past: [...current.past, current.present].slice(-HISTORY_LIMIT),
-        present: next,
-        future: current.future.slice(1),
-        savedKey: current.savedKey,
-      };
-    });
-  }, []);
+  const undo = useCallback(() => setHistory(undoHistory), []);
+  const redo = useCallback(() => setHistory(redoHistory), []);
 
   useEffect(() => {
     try {
@@ -125,6 +143,7 @@ export function useDocumentHistory(initial: StudioDocument, initialSaved: boolea
   return {
     document: history.present,
     commit,
+    latest,
     replace,
     markSaved,
     undo,

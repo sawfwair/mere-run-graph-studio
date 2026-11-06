@@ -65,26 +65,31 @@ import {
   commandPayload,
   createGraph,
   createSidecar,
-  deleteGraphOutput,
-  deleteNode,
-  editorGroupName,
   editorGroupNodeId,
-  editorNoteName,
   editorNoteNodeId,
   layoutEditorNodes,
   inlineMaterialNode,
   promoteNodeArgument,
-  referencesIn,
   renameGraphInput,
   renameGraphOutput,
   renameNode,
   saveEditorSelection,
-  uniqueId,
 } from './graph';
 import { loadRecoveredDocument, useDocumentHistory } from './history';
+import {
+  addAssetInputs,
+  deleteElements,
+  moveElements,
+  removeEditorItems as removeDocumentEditorItems,
+  removeInputs as removeDocumentInputs,
+  removeNodes as removeDocumentNodes,
+  removeOutputs as removeDocumentOutputs,
+  type DeleteRequest,
+} from './document-edits';
 import { CloudRuntime, type SharedAppVersion } from './cloud-runtime';
 import { captureRunSource } from './canvas-execution';
 import { useCanvasRun } from './use-canvas-run';
+import { prettyJson, useDraft } from './use-draft';
 import { removeBoardOutput, saveBoardOutput } from './creative-board';
 import { capturePreset, insertPreset, loadPresetLibrary, storePresetLibrary, type SavedPreset } from './presets';
 import type { NodeRunPreview, NodeRunPreviewItem } from './run-preview';
@@ -253,6 +258,34 @@ function handleViewShortcut(event: KeyboardEvent, mode: StudioMode, actions: Sho
   if (view === 'runs') actions.refreshRuns();
 }
 
+/** The first missing model that another reachable executor has installed. */
+function findModelRoute(
+  missing: readonly string[],
+  installedByExecutor: Record<string, string[]>,
+  executor: string,
+  executors: readonly string[],
+): { model: string; executor: string } | null {
+  for (const model of missing) {
+    const capable = executorsWithModel(installedByExecutor, model).find((id) => id !== executor && executors.includes(id));
+    if (capable) return { model, executor: capable };
+  }
+  return null;
+}
+
+function failedModelPull(model: string, error: unknown): ModelPull {
+  return {
+    model,
+    state: 'failed',
+    percent: null,
+    received_bytes: null,
+    total_bytes: null,
+    detail: error instanceof Error ? error.message : String(error),
+    install_path: null,
+    stderr: '',
+    updated_at: new Date().toISOString(),
+  };
+}
+
 function viewTabClass(view: StudioView, target: StudioView, base = ''): string {
   return `${base}${view === target ? ' active' : ''}`.trim();
 }
@@ -264,7 +297,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   onOpenSettings?: () => void;
   onSignOut?: () => void;
 }): ReactElement {
-  const recoveredDocument = useMemo(loadRecoveredDocument, []);
+  const [recoveredDocument] = useState(loadRecoveredDocument);
   const initialDocument = useMemo(() => recoveredDocument ?? {
     graph: createGraph(),
     inputs: {},
@@ -273,6 +306,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const {
     document,
     commit: commitDocument,
+    latest: latestDocument,
     replace: replaceDocument,
     markSaved,
     undo,
@@ -311,6 +345,20 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const [health, setHealth] = useState<'connecting' | 'ready' | 'error'>('connecting');
   const [busy, setBusy] = useState<string | null>(null);
+  // Run and Save can also be triggered by shortcuts and the palette, which do
+  // not see the disabled toolbar buttons; a ref also blocks a second press that
+  // lands before React re-renders.
+  const exclusiveTask = useRef(false);
+  const beginExclusive = useCallback((label: string) => {
+    if (exclusiveTask.current) return false;
+    exclusiveTask.current = true;
+    setBusy(label);
+    return true;
+  }, []);
+  const endExclusive = useCallback(() => {
+    exclusiveTask.current = false;
+    setBusy(null);
+  }, []);
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [diagnosticTitle, setDiagnosticTitle] = useState('Ready');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -320,8 +368,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const palettePosition = useRef<CanvasPosition | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastId = useRef(0);
-  const [jsonText, setJsonText] = useState(() => JSON.stringify(graph, null, 2));
-  const [inputsText, setInputsText] = useState(() => JSON.stringify(inputs, null, 2));
+  const [jsonText, setJsonText] = useDraft(graph, prettyJson);
+  const [inputsText, setInputsText] = useDraft(inputs, prettyJson);
   const [jsonDocument, setJsonDocument] = useState<JsonDocument>('workflow');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [runs, setRuns] = useState<StudioRun[]>([]);
@@ -329,6 +377,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const canvas = useCanvasRun(graph, inputs, runs, runtime);
   const trackCanvasRun = canvas.track;
   const loadCanvasArtifact = useCallback((id: string, path: string, contentType?: string) => runtime.artifactBlob(id, path, contentType), [runtime]);
+  const loadInputAsset = useCallback((path: string, contentType?: string) => runtime.inputAssetBlob(path, contentType), [runtime]);
   const [variations, setVariations] = useState<AppVariation[]>([]);
   const [variationField, setVariationField] = useState<string | null>(null);
   const [variationBusy, setVariationBusy] = useState(false);
@@ -375,8 +424,6 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   const comfyFile = useRef<HTMLInputElement>(null);
   const projectFile = useRef<HTMLInputElement>(null);
 
-  useEffect(() => setJsonText(JSON.stringify(graph, null, 2)), [graph]);
-  useEffect(() => setInputsText(JSON.stringify(inputs, null, 2)), [inputs]);
 
   const pushToast = useCallback((tone: ToastItem['tone'], title: string, message?: string) => {
     toastId.current += 1;
@@ -453,8 +500,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     }
   }, [runtime]);
 
-  const loadEnvironment = useCallback((options?: { quiet?: boolean }) => {
-    setHealth('connecting');
+  const fetchEnvironment = useCallback((options?: { quiet?: boolean }) => {
     return Promise.all([
       runtime.catalog(), runtime.executors(), runtime.templates(),
       readModelInventory(runtime),
@@ -480,7 +526,13 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       });
   }, [runtime, showError]);
 
-  useEffect(() => { void loadEnvironment(); }, [loadEnvironment]);
+  const loadEnvironment = useCallback((options?: { quiet?: boolean }) => {
+    setHealth('connecting');
+    return fetchEnvironment(options);
+  }, [fetchEnvironment]);
+
+  // Health starts as 'connecting', so the first load only needs the fetch.
+  useEffect(() => { void fetchEnvironment(); }, [fetchEnvironment]);
 
   useEffect(() => {
     if (executor === 'local') return undefined;
@@ -494,12 +546,17 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     return () => { active = false; };
   }, [executor, runtime]);
 
-  useEffect(() => {
-    if (!canvas.run) return;
+  // Mirror canvas run updates into the run list while rendering, so the list
+  // and the selected run never show a state older than the canvas.
+  const [mirroredCanvasRun, setMirroredCanvasRun] = useState(canvas.run);
+  if (canvas.run !== mirroredCanvasRun) {
+    setMirroredCanvasRun(canvas.run);
     const update = canvas.run;
-    setRuns((current) => [update, ...current.filter((item) => item.id !== update.id)]);
-    setSelectedRun((current) => current?.id === update.id ? update : current);
-  }, [canvas.run]);
+    if (update) {
+      setRuns((current) => [update, ...current.filter((item) => item.id !== update.id)]);
+      setSelectedRun((current) => current?.id === update.id ? update : current);
+    }
+  }
 
   const selectedRunId = selectedRun?.id;
   const selectedRunState = selectedRun?.state;
@@ -572,16 +629,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   };
 
   const removeNodes = (ids: string[]) => {
-    commitDocument((current) => {
-      let nextGraph = current.graph;
-      let nextSidecar = current.sidecar;
-      for (const id of ids) {
-        const result = deleteNode(nextGraph, nextSidecar, id);
-        nextGraph = result.graph;
-        nextSidecar = result.sidecar;
-      }
-      return { ...current, graph: nextGraph, sidecar: nextSidecar };
-    });
+    commitDocument((current) => removeDocumentNodes(current, ids));
     setSelectedNodeIds((current) => current.filter((id) => !ids.includes(id)));
   };
 
@@ -685,54 +733,39 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   };
 
   const deleteInputs = (names: string[]) => {
-    const nextGraph = clone(graph);
-    const nextInputs = clone(inputs);
-    const nextSidecar = clone(sidecar);
-    for (const name of names) {
-      delete nextGraph.inputs[name];
-      delete nextInputs[name];
-      if (nextSidecar.inputs) delete nextSidecar.inputs[name];
-    }
-    for (const node of nextGraph.nodes) {
-      for (const [argument, value] of Object.entries(node.arguments)) {
-        if (names.some((name) => referencesIn(value).includes(`inputs.${name}`))) delete node.arguments[argument];
-      }
-    }
-    commitDocument((current) => ({ ...current, graph: nextGraph, inputs: nextInputs, sidecar: nextSidecar }));
+    commitDocument((current) => removeDocumentInputs(current, names));
     selectNode(null);
   };
   const deleteInput = (name: string) => deleteInputs([name]);
+
+  const deleteCanvasElements = (request: DeleteRequest) => {
+    commitDocument((current) => deleteElements(current, request));
+    clearDeletedSelection(request);
+  };
+
+  const clearDeletedSelection = (request: DeleteRequest) => {
+    setSelectedNodeIds((current) => current.filter((id) => !request.nodeIds.includes(id)));
+    setSelectedInputName((current) => (current && request.inputNames.includes(current) ? null : current));
+    setSelectedOutputName((current) => (current && request.outputNames.includes(current) ? null : current));
+    setSelectedEditorItemId((current) => (current && request.editorIds.includes(current) ? null : current));
+  };
+
+  const moveCanvasElements = useCallback((moved: { id: string; position: CanvasPosition }[]) => {
+    commitDocument((current) => ({ ...current, sidecar: moveElements(current.sidecar, moved) }));
+  }, [commitDocument]);
+
+  const setViewport = useCallback((viewport: EditorSidecar['viewport']) => {
+    commitDocument((current) => ({ ...current, sidecar: { ...current.sidecar, viewport } }));
+  }, [commitDocument]);
 
   const importDroppedFiles = useCallback(async (paths: string[], position: CanvasPosition) => {
     try {
       const result = await runtime.importAssets(paths);
       if (!result.assets.length) return;
-      const nextGraph = clone(graph);
-      const nextInputs = clone(inputs);
-      const nextSidecar = clone(sidecar);
-      nextSidecar.inputs = { ...nextSidecar.inputs };
-      const created: string[] = [];
-      result.assets.forEach((asset, index) => {
-        const stem = asset.name.replace(/\.[^.]+$/, '');
-        const name = uniqueId(stem, [...Object.keys(nextGraph.inputs), ...created]);
-        created.push(name);
-        nextGraph.inputs[name] = {
-          type: 'asset',
-          required: true,
-          description: `Imported ${asset.content_type}`,
-        };
-        nextInputs[name] = asset.path;
-        nextSidecar.inputs![name] = {
-          x: Math.round(position.x + (index % 3) * 256),
-          y: Math.round(position.y + Math.floor(index / 3) * 164),
-        };
-      });
-      commitDocument((current) => ({
-        ...current,
-        graph: nextGraph,
-        inputs: nextInputs,
-        sidecar: nextSidecar,
-      }));
+      // Plan against the latest document (edits may have landed during the
+      // import) and apply the same pure edit inside the commit.
+      const { created } = addAssetInputs(latestDocument(), result.assets, position);
+      commitDocument((current) => addAssetInputs(current, result.assets, position).document);
       selectInput(created[0] ?? null);
       pushToast(
         'success',
@@ -742,7 +775,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     } catch (error) {
       showError('File import failed', error);
     }
-  }, [commitDocument, graph, inputs, pushToast, runtime, showError, sidecar]);
+  }, [commitDocument, latestDocument, pushToast, runtime, showError]);
 
   const saveOutput = (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => {
     try {
@@ -756,19 +789,12 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     setBusy('Importing output');
     try {
       const asset = await runtime.importRunArtifact(item.run_id, item.path);
-      const name = uniqueId(asset.name.replace(/\.[^.]+$/, ''), Object.keys(graph.inputs));
-      const origin = sidecar.nodes[item.node_id] ?? { x: 80, y: 80 };
-      commitDocument((current) => ({
-        ...current,
-        graph: { ...current.graph, inputs: { ...current.graph.inputs, [name]: {
-          type: 'asset', required: true,
-        } } },
-        inputs: { ...current.inputs, [name]: asset.path },
-        sidecar: { ...current.sidecar, inputs: { ...current.sidecar.inputs,
-          [name]: { x: origin.x + 380, y: origin.y + 60 },
-        } },
-      }));
-      selectInput(name);
+      const latest = latestDocument();
+      const origin = latest.sidecar.nodes[item.node_id] ?? { x: 80, y: 80 };
+      const position = { x: origin.x + 380, y: origin.y + 60 };
+      const { created } = addAssetInputs(latest, [asset], position);
+      commitDocument((current) => addAssetInputs(current, [asset], position).document);
+      selectInput(created[0] ?? null);
       setView('canvas');
       pushToast('success', 'Output added as input', 'Connect it to a new node to refine or branch.');
     } catch (error) { showError('Could not use output', error); }
@@ -829,32 +855,14 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
   };
 
   const removeOutputs = (names: string[]) => {
-    commitDocument((current) => {
-      let nextGraph = current.graph;
-      let nextSidecar = current.sidecar;
-      for (const name of names) {
-        const result = deleteGraphOutput(nextGraph, nextSidecar, name);
-        nextGraph = result.graph;
-        nextSidecar = result.sidecar;
-      }
-      return { ...current, graph: nextGraph, sidecar: nextSidecar };
-    });
+    commitDocument((current) => removeDocumentOutputs(current, names));
     if (selectedOutputName && names.includes(selectedOutputName)) selectOutput(null);
   };
 
   const removeOutput = (name: string) => removeOutputs([name]);
 
   const removeEditorItems = (ids: string[]) => {
-    commitDocument((current) => {
-      const nextSidecar = clone(current.sidecar);
-      for (const id of ids) {
-        const groupName = editorGroupName(id);
-        const noteName = editorNoteName(id);
-        if (groupName && nextSidecar.groups) delete nextSidecar.groups[groupName];
-        if (noteName && nextSidecar.notes) delete nextSidecar.notes[noteName];
-      }
-      return { ...current, sidecar: nextSidecar };
-    });
+    commitDocument((current) => removeDocumentEditorItems(current, ids));
     if (selectedEditorItemId && ids.includes(selectedEditorItemId)) selectEditorItem(null);
   };
 
@@ -906,7 +914,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
       saveDialog.current?.showModal();
       return;
     }
-    setBusy('Saving');
+    if (!beginExclusive('Saving')) return;
     const savedDocument = { graph, inputs, sidecar, program };
     try {
       await runtime.saveProject({ path, ...savedDocument });
@@ -918,9 +926,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     } catch (error) {
       showError('Save failed', error);
     } finally {
-      setBusy(null);
+      endExclusive();
     }
-  }, [graph, inputs, markSaved, program, projectPath, pushToast, runtime, showError, sidecar]);
+  }, [beginExclusive, endExclusive, graph, inputs, markSaved, program, projectPath, pushToast, runtime, showError, sidecar]);
 
   const openProjects = async () => {
     try {
@@ -1193,7 +1201,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
   const runGraph = useCallback(async (options?: { keepView?: boolean; executor?: string }) => {
     const target = options?.executor ?? executor;
-    setBusy('Submitting');
+    if (!beginExclusive('Submitting')) return;
     try {
       if (options?.executor && options.executor !== executor) setExecutor(options.executor);
       const captured = await captureRunSource(graph, inputs);
@@ -1207,9 +1215,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     } catch (error) {
       showError('Run failed', error);
     } finally {
-      setBusy(null);
+      endExclusive();
     }
-  }, [executor, graph, inputs, pushToast, runtime, showError, trackCanvasRun]);
+  }, [beginExclusive, endExclusive, executor, graph, inputs, pushToast, runtime, showError, trackCanvasRun]);
 
   const appRunning = Boolean(
     appRunId && selectedRun?.id === appRunId
@@ -1223,13 +1231,10 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     () => (availableModels.length ? missingModels(graph, installedOnTarget) : []),
     [availableModels.length, graph, installedOnTarget],
   );
-  const appModelRoute = useMemo(() => {
-    for (const model of appMissingModels) {
-      const capable = executorsWithModel(installedByExecutor, model).filter((id) => id !== executor && executors.includes(id));
-      if (capable.length) return { model, executor: capable[0] };
-    }
-    return null;
-  }, [appMissingModels, executor, executors, installedByExecutor]);
+  const appModelRoute = useMemo(
+    () => findModelRoute(appMissingModels, installedByExecutor, executor, executors),
+    [appMissingModels, executor, executors, installedByExecutor],
+  );
 
   const runVariations = async (candidate: VariationCandidate, count: number) => {
     setVariationBusy(true);
@@ -1272,19 +1277,37 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
 
   const canInstallModels = runtime.canInstallModels();
 
+  // The sheet shows one model at a time, while pulls keep running (and still
+  // notify on completion) after it closes. One watcher per model; updates for a
+  // model the sheet is not showing never reach the sheet.
+  const installSheetModel = useRef<string | null>(null);
+  const installWatches = useRef(new Map<string, AbortController>());
+  useEffect(() => {
+    const watches = installWatches.current;
+    return () => {
+      for (const controller of watches.values()) controller.abort();
+    };
+  }, []);
+
   const beginInstall = useCallback((model: string) => {
     if (!canInstallModels) return;
+    installSheetModel.current = model;
     setInstallModel(model);
     setInstallPreflight(null);
     setInstallPreflightError(null);
     setInstallPull(null);
     setInstallStarting(false);
     void runtime.modelPreflight(model)
-      .then((document) => setInstallPreflight(document))
-      .catch((error: unknown) => setInstallPreflightError(error instanceof Error ? error.message : String(error)));
+      .then((document) => {
+        if (installSheetModel.current === model) setInstallPreflight(document);
+      })
+      .catch((error: unknown) => {
+        if (installSheetModel.current === model) setInstallPreflightError(error instanceof Error ? error.message : String(error));
+      });
   }, [canInstallModels, runtime]);
 
   const closeInstall = useCallback(() => {
+    installSheetModel.current = null;
     setInstallModel(null);
     setInstallPreflight(null);
     setInstallPreflightError(null);
@@ -1297,18 +1320,25 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
     if (!model) return;
     setInstallStarting(true);
     setInstallPull(null);
+    installWatches.current.get(model)?.abort();
     const controller = new AbortController();
+    installWatches.current.set(model, controller);
+    const showing = () => !controller.signal.aborted && installSheetModel.current === model;
     void runtime.startModelPull(model, options)
       .then((pull) => {
-        setInstallPull(pull);
-        setInstallStarting(false);
+        if (controller.signal.aborted) return;
+        if (showing()) {
+          setInstallPull(pull);
+          setInstallStarting(false);
+        }
         if (pull.state === 'installed') {
           void refreshInstalledModels();
           pushToast('info', 'Model installed', model);
           return;
         }
         return runtime.watchModelPull(model, (update) => {
-          setInstallPull(update);
+          if (controller.signal.aborted) return;
+          if (showing()) setInstallPull(update);
           if (update.state === 'installed') {
             void refreshInstalledModels();
             pushToast('info', 'Model installed', model);
@@ -1318,18 +1348,17 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
         }, controller.signal);
       })
       .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        const failed = failedModelPull(model, error);
+        if (!showing()) {
+          pushToast('error', 'Installation failed', failed.detail ?? model);
+          return;
+        }
         setInstallStarting(false);
-        setInstallPull({
-          model,
-          state: 'failed',
-          percent: null,
-          received_bytes: null,
-          total_bytes: null,
-          detail: error instanceof Error ? error.message : String(error),
-          install_path: null,
-          stderr: '',
-          updated_at: new Date().toISOString(),
-        });
+        setInstallPull(failed);
+      })
+      .finally(() => {
+        if (installWatches.current.get(model) === controller) installWatches.current.delete(model);
       });
   }, [installModel, pushToast, refreshInstalledModels, runtime]);
 
@@ -1720,8 +1749,8 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             onRunOnExecutor={(execId) => void runGraph({ keepView: true, executor: execId })}
             canInstallModels={canInstallModels}
             onInstallModel={beginInstall}
-            artifactBlob={(id, path, contentType) => runtime.artifactBlob(id, path, contentType)}
-            inputAssetBlob={(path, contentType) => runtime.inputAssetBlob(path, contentType)}
+            artifactBlob={loadCanvasArtifact}
+            inputAssetBlob={loadInputAsset}
           />
         ) : view === 'board' ? (
           <BoardView items={boardItems} artifactBlob={loadCanvasArtifact}
@@ -1776,7 +1805,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               onUseOutput={useOutput}
               mode={mode}
               artifactBlob={loadCanvasArtifact}
-              inputAssetBlob={(path, contentType) => runtime.inputAssetBlob(path, contentType)}
+              inputAssetBlob={loadInputAsset}
               availableModels={installedOnTarget}
               onRaceModels={(nodeId, models) => void runModelRace(nodeId, models)}
               canInstallModels={canInstallModels}
@@ -1787,10 +1816,9 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
               onSelectInput={selectInput}
               onSelectOutput={selectOutput}
               onSelectEditorItem={selectEditorItem}
-              onDeleteNodes={removeNodes}
-              onDeleteInputs={deleteInputs}
-              onDeleteOutputs={removeOutputs}
-              onDeleteEditorItems={removeEditorItems}
+              onDeleteElements={deleteCanvasElements}
+              onMoveElements={moveCanvasElements}
+              onViewportChange={setViewport}
               onDropNode={(entry, position) => addNode(entry, position)}
               onDropPreset={(id, position) => { const preset = presets.find((item) => item.id === id); if (preset) addPreset(preset, position); }}
               onDropFiles={(paths, position) => void importDroppedFiles(paths, position)}
@@ -1868,7 +1896,7 @@ export function Workspace({ runtime, onOpenSettings, onSignOut }: {
             onFetch={(id, allArtifacts, artifactNames) => void fetchRun(id, allArtifacts, artifactNames)}
             onRetry={(id) => void retryRun(id)}
             onResume={(id) => void resumeRun(id)}
-            artifactBlob={(id, path, contentType) => runtime.artifactBlob(id, path, contentType)}
+            artifactBlob={loadCanvasArtifact}
           />
         ) : view === 'catalog' ? (
           <div className="mobile-library-view">{library}</div>

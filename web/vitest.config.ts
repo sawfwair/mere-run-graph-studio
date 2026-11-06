@@ -10,6 +10,7 @@ export default defineConfig({
         'src/cloud-contract.ts',
         'src/canvas-execution.ts',
         'src/decode.ts',
+        'src/document-edits.ts',
         'src/graph.ts',
         'src/model-install.ts',
         'src/models.ts',

@@ -1,10 +1,11 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, type ReactElement } from 'react';
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
 import { Braces, File, Image, Music, Type, Video } from 'lucide-react';
 
 import { GRAPH_INPUT_HANDLE } from '../graph';
 import { friendlyType, portTypeKey, summarizeValue } from '../ui';
 import type { GraphInputDefinition, JsonValue } from '../types';
+import { mediaKey, useObjectUrl } from '../use-object-url';
 
 export interface GraphInputNodeData extends Record<string, unknown> {
   name: string;
@@ -27,33 +28,21 @@ function mediaType(path: string): string | undefined {
   return mediaTypes[extension];
 }
 
-function inputIcon(contentType: string | undefined, isAsset: boolean, definition: GraphInputDefinition) {
-  if (contentType?.startsWith('image/')) return Image;
-  if (contentType?.startsWith('video/')) return Video;
-  if (contentType?.startsWith('audio/')) return Music;
-  if (isAsset) return File;
-  return definition.type === 'string' ? Type : Braces;
+function InputIcon({ contentType, isAsset, definition }: {
+  contentType: string | undefined;
+  isAsset: boolean;
+  definition: GraphInputDefinition;
+}): ReactElement {
+  if (contentType?.startsWith('image/')) return <Image size={15} />;
+  if (contentType?.startsWith('video/')) return <Video size={15} />;
+  if (contentType?.startsWith('audio/')) return <Music size={15} />;
+  if (isAsset) return <File size={15} />;
+  return definition.type === 'string' ? <Type size={15} /> : <Braces size={15} />;
 }
 
 function InputMedia({ path, assetBlob }: { path: string; assetBlob: NonNullable<GraphInputNodeData['assetBlob']> }) {
-  const [url, setUrl] = useState<string | null>(null);
   const contentType = mediaType(path);
-  useEffect(() => {
-    if (!contentType) return undefined;
-    let live = true;
-    let objectUrl: string | null = null;
-    void assetBlob(path, contentType).then((blob) => {
-      if (!live) return;
-      objectUrl = URL.createObjectURL(blob);
-      setUrl(objectUrl);
-    }).catch(() => {
-      if (live) setUrl(null);
-    });
-    return () => {
-      live = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [assetBlob, contentType, path]);
+  const { url } = useObjectUrl(contentType ? mediaKey(path, contentType) : null, () => assetBlob(path, contentType));
 
   if (!url || !contentType) return null;
   if (contentType.startsWith('image/')) return <img src={url} alt="" />;
@@ -67,13 +56,13 @@ function GraphInputNodeView({ data, selected }: NodeProps<GraphInputFlowNode>) {
   const isAsset = definition.type.startsWith('asset');
   const path = typeof value === 'string' ? value : null;
   const contentType = path ? mediaType(path) : undefined;
-  const Icon = inputIcon(contentType, isAsset, definition);
   const filename = path?.split('/').at(-1);
 
   return (
     <article
       className={`graph-input-node t-${portTypeKey(definition.type)} ${selected ? 'selected' : ''}`}
       role="button"
+      aria-label={`Edit workflow input ${name}`}
       tabIndex={0}
       onDoubleClick={onSelect}
       onKeyDown={(event) => {
@@ -83,7 +72,7 @@ function GraphInputNodeView({ data, selected }: NodeProps<GraphInputFlowNode>) {
       }}
     >
       <header>
-        <span className="graph-input-icon"><Icon size={15} /></span>
+        <span className="graph-input-icon"><InputIcon contentType={contentType} isAsset={isAsset} definition={definition} /></span>
         <span>
           <strong>{name}</strong>
           <small>Workflow input · {friendlyType(definition.type)}</small>
