@@ -9,7 +9,10 @@ import {
   MiniMap,
   ReactFlow,
   useReactFlow,
+  useStoreApi,
+  useUpdateNodeInternals,
   type Connection,
+  type InternalNode,
   type Edge,
   type NodeMouseHandler,
   type OnMove,
@@ -359,6 +362,41 @@ function graphOutputEdge(name: string, reference: string, entries: EntryMap): Ed
   };
 }
 
+function lostHandleBounds(node: InternalNode): boolean {
+  return !node.hidden && Boolean(node.measured.width && node.measured.height) && !node.internals.handleBounds;
+}
+
+/**
+ * Re-measures nodes that React Flow knows the size of but whose handle bounds
+ * were dropped. React Flow forgets handle bounds whenever it receives a node
+ * without `measured`, which happens when a nodes update reaches it before the
+ * matching measurement has made it back into our state. It only measures
+ * again when a node is first shown or resized, so a card with a fixed size
+ * (graph inputs and outputs) would otherwise keep its edges hidden for good.
+ */
+function useRemeasureLostHandles(): void {
+  const store = useStoreApi();
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => {
+    let frame = 0;
+    const check = () => {
+      if (frame) return;
+      const lost = [...store.getState().nodeLookup.values()].filter(lostHandleBounds).map((node) => node.id);
+      if (!lost.length) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        updateNodeInternals(lost);
+      });
+    };
+    check();
+    const unsubscribe = store.subscribe(check);
+    return () => {
+      unsubscribe();
+      cancelAnimationFrame(frame);
+    };
+  }, [store, updateNodeInternals]);
+}
+
 export function GraphCanvas({
   graph,
   inputs,
@@ -393,6 +431,7 @@ export function GraphCanvas({
   onQuickAdd,
 }: GraphCanvasProps): ReactElement {
   const { screenToFlowPosition } = useReactFlow();
+  useRemeasureLostHandles();
   const shellRef = useRef<HTMLDivElement>(null);
   const [fileDropActive, setFileDropActive] = useState(false);
   const compactOpening = mode === 'easy' && window.matchMedia('(max-width: 680px)').matches;
