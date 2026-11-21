@@ -45,6 +45,7 @@ import {
   ORDER_INPUT_HANDLE,
   ORDER_OUTPUT_HANDLE,
   referencesWithPaths,
+  setNodeArgument,
   type ReferenceLocation,
   wouldCreateDependencyCycle,
 } from '../graph';
@@ -52,12 +53,13 @@ import { portTypeKey, type StudioMode } from '../ui';
 import type { NodeRunPreview, NodeRunPreviewItem } from '../run-preview';
 import type { NodeExecutionState } from '../canvas-execution';
 import type { DeleteRequest, EdgeRemoval } from '../document-edits';
-import type { CatalogEntry, EditorSidecar, JsonObject, WorkflowGraph } from '../types';
+import type { CatalogEntry, EditorSidecar, JsonObject, JsonValue, WorkflowGraph } from '../types';
 import { EditorGroupNode, type EditorGroupFlowNode } from './EditorGroupNode';
 import { EditorNoteNode, type EditorNoteFlowNode } from './EditorNoteNode';
 import { GraphInputNode, type GraphInputFlowNode } from './GraphInputNode';
 import { GraphOutputNode, type GraphOutputFlowNode } from './GraphOutputNode';
 import { WorkflowNode, type WorkflowFlowNode } from './WorkflowNode';
+import { sameNodeData } from '../node-data';
 
 export const NODE_DRAG_TYPE = 'application/x-mere-studio-node';
 export const PRESET_DRAG_TYPE = 'application/x-mere-studio-preset';
@@ -169,16 +171,46 @@ function deleteRequest(nodes: readonly StudioFlowNode[], edges: readonly Edge[])
   };
 }
 
+// Workflow node data callbacks that bind only the node id and call through
+// useWorkflowNodeActions, which always reaches the latest canvas props.
+const WORKFLOW_NODE_CALLBACKS: ReadonlySet<string> = new Set([
+  'onArgumentChange', 'onPinPreview', 'onUnpinPreview', 'onSaveOutput', 'onUseOutput',
+]);
+
 function mergeDerivedNodes(current: StudioFlowNode[], derived: StudioFlowNode[]): StudioFlowNode[] {
   const previous = new Map(current.map((node) => [node.id, node]));
   return derived.map((node) => {
     const prior = previous.get(node.id);
+    if (node.type !== 'workflow' || prior?.type !== 'workflow') return { ...prior, ...node };
     // Catalog arrival can add handles without changing the card size.
     // Let React Flow measure those handles again; preserve measurements
     // for data-only updates so output events do not reobserve every node.
-    if (node.type === 'workflow' && prior?.type === 'workflow' && prior.data.entry !== node.data.entry) return node;
-    return { ...prior, ...node };
+    if (prior.data.entry !== node.data.entry) return node;
+    // Keep the card's data object when nothing it shows has changed, so the
+    // memoized card skips rendering on unrelated edits and run updates.
+    return sameNodeData(prior.data, node.data, WORKFLOW_NODE_CALLBACKS) ? { ...prior, ...node, data: prior.data } : { ...prior, ...node };
   });
+}
+
+type WorkflowNodeHandlers = Pick<GraphCanvasProps,
+  'graph' | 'onGraphChange' | 'onPinPreview' | 'onUnpinPreview' | 'onSaveOutput' | 'onUseOutput' | 'onRaceModels' | 'onInstallModel'>;
+
+/** Stable node callbacks that always reach the latest canvas props. */
+function useWorkflowNodeActions(handlers: WorkflowNodeHandlers) {
+  const latest = useRef(handlers);
+  useEffect(() => {
+    latest.current = handlers;
+  });
+  return useMemo(() => ({
+    argumentChange: (nodeId: string, name: string, argument: JsonValue | undefined) =>
+      latest.current.onGraphChange(setNodeArgument(latest.current.graph, nodeId, name, argument)),
+    pin: (nodeId: string) => latest.current.onPinPreview(nodeId),
+    unpin: (nodeId: string) => latest.current.onUnpinPreview(nodeId),
+    save: (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => latest.current.onSaveOutput(nodeId, preview, item),
+    use: (nodeId: string, preview: NodeRunPreview, item: NodeRunPreviewItem) => latest.current.onUseOutput?.(nodeId, preview, item),
+    race: (nodeId: string, models: string[]) => latest.current.onRaceModels?.(nodeId, models),
+    install: (model: string) => latest.current.onInstallModel?.(model),
+  }), []);
 }
 
 const nodeTypes = {
@@ -393,6 +425,12 @@ export function GraphCanvas({
   onQuickAdd,
 }: GraphCanvasProps): ReactElement {
   const { screenToFlowPosition } = useReactFlow();
+  const actions = useWorkflowNodeActions({
+    graph, onGraphChange, onPinPreview, onUnpinPreview, onSaveOutput, onUseOutput, onRaceModels, onInstallModel,
+  });
+  const canUseOutput = Boolean(onUseOutput);
+  const canRaceModels = Boolean(onRaceModels);
+  const canInstallHandler = Boolean(onInstallModel);
   const shellRef = useRef<HTMLDivElement>(null);
   const [fileDropActive, setFileDropActive] = useState(false);
   const compactOpening = mode === 'easy' && window.matchMedia('(max-width: 680px)').matches;
@@ -438,24 +476,16 @@ export function GraphCanvas({
           preview: previews[value.id],
           execution: execution[value.id],
           pinnedPreview: pinnedPreviews[value.id],
-          onPinPreview: () => onPinPreview(value.id),
-          onUnpinPreview: () => onUnpinPreview(value.id),
-          onSaveOutput: (preview, item) => onSaveOutput(value.id, preview, item),
-          onUseOutput: onUseOutput ? (preview, item) => onUseOutput(value.id, preview, item) : undefined,
+          onPinPreview: () => actions.pin(value.id),
+          onUnpinPreview: () => actions.unpin(value.id),
+          onSaveOutput: (preview, item) => actions.save(value.id, preview, item),
+          onUseOutput: canUseOutput ? (preview, item) => actions.use(value.id, preview, item) : undefined,
           artifactBlob,
           availableModels,
-          onRaceModels,
+          onRaceModels: canRaceModels ? actions.race : undefined,
           canInstallModels,
-          onInstallModel,
-          onArgumentChange: (name, argument) => {
-            const next = structuredClone(graph);
-            const node = next.nodes.find((candidate) => candidate.id === value.id);
-            if (node) {
-              if (argument === undefined) delete node.arguments[name];
-              else node.arguments[name] = argument;
-              onGraphChange(next);
-            }
-          },
+          onInstallModel: canInstallHandler ? actions.install : undefined,
+          onArgumentChange: (name, argument) => actions.argumentChange(value.id, name, argument),
         },
         ariaLabel: `Workflow node ${value.id}`,
         selected: selectedNodeIds.includes(value.id),
@@ -528,18 +558,19 @@ export function GraphCanvas({
       return [...groupNodes, ...noteNodes, ...inputNodes, ...workflowNodes, ...outputNodes];
     },
     [
+      actions,
+      canInstallHandler,
+      canRaceModels,
+      canUseOutput,
       catalog,
-      execution, pinnedPreviews, onPinPreview, onUnpinPreview, onSaveOutput, onUseOutput,
+      execution, pinnedPreviews,
       artifactBlob,
       graph,
       inputAssetBlob,
       availableModels,
-      onRaceModels,
       canInstallModels,
-      onInstallModel,
       inputs,
       mode,
-      onGraphChange,
       onSelectEditorItem,
       onSelectNodes,
       onSelectInput,

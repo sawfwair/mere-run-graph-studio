@@ -19,7 +19,9 @@ import {
   editorNoteNodeId,
   graphInputNodeId,
   graphOutputNodeId,
+  setNodeArgument,
 } from './graph';
+import { sameNodeData } from './node-data';
 import { commitHistory, documentKey, redoHistory, undoHistory, type DocumentHistory } from './history';
 import type { CatalogEntry, StudioDocument } from './types';
 
@@ -179,5 +181,29 @@ describe('document history', () => {
     expect(redone.present.graph.nodes).toHaveLength(1);
     expect(redone.present.sidecar.viewport.x).toBe(512);
     expect(undoHistory(start())).toEqual(start());
+  });
+});
+
+describe('canvas node edits', () => {
+  it('changes one argument without replacing the other nodes', () => {
+    const value = fixture();
+    const next = setNodeArgument(value.graph, value.videoId, 'prompt', 'a slow pan');
+    const video = next.nodes.find((node) => node.id === value.videoId);
+    expect(video?.arguments.prompt).toBe('a slow pan');
+    expect(next.nodes.find((node) => node.id === value.imageId)).toBe(value.graph.nodes.find((node) => node.id === value.imageId));
+    const cleared = setNodeArgument(next, value.videoId, 'prompt', undefined);
+    expect(cleared.nodes.find((node) => node.id === value.videoId)?.arguments).not.toHaveProperty('prompt');
+  });
+
+  it('treats rebuilt node data as unchanged when it shows the same thing', () => {
+    const bound = new Set(['onPin']);
+    const load = () => undefined;
+    const preview = { runId: 'run-1', state: 'finished', items: [] };
+    const data = { ordinal: 1, preview, load, onPin: () => undefined };
+    expect(sameNodeData(data, { ordinal: 1, preview: structuredClone(preview), load, onPin: () => undefined }, bound)).toBe(true);
+    expect(sameNodeData(data, { ordinal: 1, preview: { ...preview, state: 'running' }, load, onPin: () => undefined }, bound)).toBe(false);
+    expect(sameNodeData(data, { ordinal: 1, preview, load, onPin: undefined }, bound)).toBe(false);
+    expect(sameNodeData(data, { ordinal: 2, preview, load, onPin: () => undefined }, bound)).toBe(false);
+    expect(sameNodeData(data, { ordinal: 1, preview, load: () => undefined, onPin: () => undefined }, bound)).toBe(false);
   });
 });

@@ -385,19 +385,8 @@ export class NativeRuntime implements StudioRuntime {
     return invokeDecoded('studio_inspect_run', decodeStudioRun, { value: id });
   }
 
-  async watchRun(id: string, onRun: (run: StudioRun) => void, signal: AbortSignal): Promise<void> {
-    while (!signal.aborted) {
-      const run = await this.inspectRun(id);
-      onRun(run);
-      if (['finished', 'failed', 'cancelled'].includes(run.state)) return;
-      await new Promise<void>((resolve) => {
-        const timeout = window.setTimeout(resolve, 350);
-        signal.addEventListener('abort', () => {
-          window.clearTimeout(timeout);
-          resolve();
-        }, { once: true });
-      });
-    }
+  watchRun(id: string, onRun: (run: StudioRun) => void, signal: AbortSignal): Promise<void> {
+    return pollRun(() => this.inspectRun(id), onRun, signal, { fastMs: 350, slowMs: 2000 });
   }
 
   cancelRun(id: string): Promise<StudioRun> {
@@ -498,6 +487,48 @@ export class NativeRuntime implements StudioRuntime {
 
   watchModelPull(model: string, onPull: (pull: ModelPull) => void, signal: AbortSignal): Promise<void> {
     return pollModelPull((id) => this.inspectModelPull(id), model, onPull, signal);
+  }
+}
+
+const RUN_TERMINAL = new Set(['finished', 'failed', 'cancelled']);
+
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => {
+      clearTimeout(timeout);
+      resolve();
+    }, { once: true });
+  });
+}
+
+/**
+ * Shared poll loop for an active run. Each poll re-reads the whole run, so
+ * `onRun` is called only when the run actually changed: an unchanged poll
+ * must not re-render the app. Polling starts at `fastMs` and slows toward
+ * `slowMs` while nothing changes, returning to `fastMs` on the next change.
+ */
+export async function pollRun(
+  inspect: () => Promise<StudioRun>,
+  onRun: (run: StudioRun) => void,
+  signal: AbortSignal,
+  { fastMs, slowMs }: { fastMs: number; slowMs: number },
+): Promise<void> {
+  let previous = '';
+  let delay = fastMs;
+  while (!signal.aborted) {
+    const run = await inspect();
+    if (signal.aborted) return;
+    const snapshot = JSON.stringify(run);
+    if (snapshot !== previous) {
+      previous = snapshot;
+      delay = fastMs;
+      onRun(run);
+    } else {
+      delay = Math.min(slowMs, Math.round(delay * 1.5));
+    }
+    if (RUN_TERMINAL.has(run.state)) return;
+    await pause(delay, signal);
   }
 }
 

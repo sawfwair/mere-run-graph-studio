@@ -1,5 +1,7 @@
 mod commands;
 mod error;
+#[cfg(target_os = "macos")]
+mod menu;
 mod model;
 mod service;
 #[cfg(target_os = "macos")]
@@ -38,7 +40,10 @@ pub fn verify_local_package(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(menu::build).on_menu_event(menu::handle_event);
+    builder
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {

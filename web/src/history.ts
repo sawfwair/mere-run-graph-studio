@@ -84,6 +84,15 @@ export function loadRecoveredDocument(): StudioDocument | null {
   }
 }
 
+/** Forget the recovery copy, for when the user chose to discard their changes. */
+export function discardRecovery(): void {
+  try {
+    window.localStorage.removeItem(RECOVERY_KEY);
+  } catch {
+    // Recovery is best effort when browser storage is unavailable.
+  }
+}
+
 export function useDocumentHistory(initial: StudioDocument, initialSaved: boolean): DocumentHistoryController {
   const [history, setHistory] = useState<DocumentHistory>(() => ({
     past: [],

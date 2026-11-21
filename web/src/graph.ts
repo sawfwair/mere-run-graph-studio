@@ -1023,3 +1023,15 @@ export function collectExecutorReferences(value: unknown, found = new Set<string
   }
   return found;
 }
+
+/** Set (or, with `undefined`, remove) one argument, keeping every other node as is. */
+export function setNodeArgument(graph: WorkflowGraph, nodeId: string, name: string, argument: JsonValue | undefined): WorkflowGraph {
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node) => {
+      if (node.id !== nodeId) return node;
+      const { [name]: _previous, ...rest } = node.arguments;
+      return { ...node, arguments: argument === undefined ? rest : { ...rest, [name]: argument } };
+    }),
+  };
+}
