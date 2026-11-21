@@ -36,7 +36,7 @@ jobs:
         with:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install --with-deps chrome
       - run: ./scripts/check.sh
 
   native-hosts:

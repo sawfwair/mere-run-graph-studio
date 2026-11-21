@@ -133,9 +133,11 @@ fn discover_command(name: &str) -> Option<PathBuf> {
         candidates.push(home.join("bin").join(&executable));
     }
     if cfg!(target_os = "macos") {
-        candidates.push(PathBuf::from("/Applications/MereRun.app/Contents/Helpers/mere.run"));
-        if let Some(home) = std::env::var_os("HOME") {
-            candidates.push(PathBuf::from(home).join("Applications/MereRun.app/Contents/Helpers/mere.run"));
+        if name == "mere.run" {
+            candidates.push(PathBuf::from("/Applications/MereRun.app/Contents/Helpers/mere.run"));
+            if let Some(home) = std::env::var_os("HOME") {
+                candidates.push(PathBuf::from(home).join("Applications/MereRun.app/Contents/Helpers/mere.run"));
+            }
         }
         candidates.push(PathBuf::from("/opt/homebrew/bin").join(&executable));
         candidates.push(PathBuf::from("/usr/local/bin").join(&executable));

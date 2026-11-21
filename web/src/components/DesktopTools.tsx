@@ -19,7 +19,7 @@ export function setupPlugins(value: JsonValue): Plugin[] {
 function PluginRows({ plugins, busy, onPlan }: { plugins: Plugin[]; busy: boolean; onPlan: (id: string) => void }) {
   return <div className="setup-plugins">{plugins.map((plugin) => <div key={plugin.id}>
     <span><strong>{plugin.name}</strong><small>{plugin.verified ? 'Installed and verified' : plugin.installed ? 'Installed; verification needed' : 'Not installed'}</small></span>
-    <button className="command-button" disabled={busy || plugin.verified} onClick={() => onPlan(plugin.id)}><Download size={13} /> Review installation</button>
+    <button className="command-button" disabled={busy} onClick={() => onPlan(plugin.id)}><Download size={13} /> {plugin.installed ? 'Review update' : 'Review installation'}</button>
   </div>)}</div>;
 }
 
@@ -31,7 +31,8 @@ async function readPlugins(runtime: SetupRuntime): Promise<Plugin[]> {
 
 export function DesktopTools({ runtime, status, onStatus }: { runtime: SetupRuntime; status: DesktopStatus; onStatus: (status: DesktopStatus) => void }): ReactElement {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
-  const [plan, setPlan] = useState<{ id: string; text: string } | null>(null);
+  const [plan, setPlan] = useState<{ id: string; text: string; source: boolean } | null>(null)
+  const [source, setSource] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [verification, setVerification] = useState<JsonObject | null>(null);
@@ -59,13 +60,13 @@ export function DesktopTools({ runtime, status, onStatus }: { runtime: SetupRunt
     finally { setBusy(null); }
   };
   const review = async (id: string) => {
-    const document = await runtime.setupPlugin(id, false);
+    const document = await runtime.setupPlugin(id, false, source);
     if (document.exit_code !== 0) throw Error(document.stderr || 'Installation plan failed');
-    setPlan({ id, text: document.stdout || document.stderr });
+    setPlan({ id, text: document.stdout || document.stderr, source });
   };
   const install = async () => {
     if (!plan) return;
-    const document = await runtime.setupPlugin(plan.id, true);
+    const document = await runtime.setupPlugin(plan.id, true, plan.source);
     if (document.exit_code !== 0) throw Error(document.stderr || document.stdout || 'Installation failed');
     setPlan(null); await loadPlugins(); onStatus(await runtime.discoverTools());
   };
@@ -81,6 +82,7 @@ export function DesktopTools({ runtime, status, onStatus }: { runtime: SetupRunt
     </div>
     <p>Models: open Studio, choose a model on a node, and select its download button. Studio shows the download preflight and any license terms before starting. Installed models stay on this computer.</p>
     {status.mere_run.available ? <details><summary>Optional plugins <small>{plugins.filter((plugin) => plugin.verified).length} verified</small></summary>
+      <label><input type="checkbox" checked={source} disabled={!!busy || plan !== null} onChange={(event) => setSource(event.target.checked)} /> Install from source with pipx</label>
       <PluginRows plugins={plugins} busy={!!busy} onPlan={(id) => void action('Reviewing installation', () => review(id))} />
     </details> : null}
     {plan ? <div className="setup-install-plan"><strong>Install {plan.id}</strong><pre>{plan.text}</pre><p>This uses the runtime's official installer and needs internet access. Review its installation method above.</p>

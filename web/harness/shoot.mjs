@@ -4,16 +4,15 @@
 //   pnpm harness:shoot                 # default state matrix
 //   pnpm harness:shoot left=1 both=left=1,right=1   # custom "name=query" shots
 //
-// Browser: uses Playwright's managed Chromium (run `npx playwright install
-// chromium` once). Override with HARNESS_BROWSER=/path/to/chrome. Output dir
-// defaults to web/harness/shots (gitignored); override with HARNESS_OUT.
+// Browser: uses an installed Google Chrome with its Chromium sandbox enabled.
+// Output defaults to web/harness/shots. Set HARNESS_OUT to use a different path.
 
 import { createServer as createViteServer } from 'vite';
 import { chromium } from 'playwright';
 import { createServer as createNetServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = process.env.HARNESS_OUT ?? resolve(here, 'shots');
@@ -71,12 +70,9 @@ const base = `http://127.0.0.1:${port}`;
 
 let browser;
 try {
-  const systemChrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-  const executablePath = process.env.HARNESS_BROWSER || (existsSync(systemChrome) ? systemChrome : undefined);
-  browser = await chromium.launch({ executablePath });
+  browser = await chromium.launch({ channel: 'chrome', chromiumSandbox: true });
 } catch (error) {
-  console.error('\nCould not launch a browser. Run `npx playwright install chromium` once,');
-  console.error('or set HARNESS_BROWSER=/path/to/chrome. Original error:\n', error instanceof Error ? error.message : String(error));
+  console.error('Could not start sandboxed Google Chrome:', error instanceof Error ? error.message : String(error));
   await server.close();
   process.exit(1);
 }

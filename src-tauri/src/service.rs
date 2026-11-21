@@ -57,6 +57,41 @@ mod tests {
         assert!(parse_runtime_version("mere.run 0.50.0") > parse_runtime_version("0.24.0"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn managed_workflow_tools_use_the_runtime_and_ignore_the_old_self_override() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().expect("temporary workspace");
+        let runtime = directory.path().join("mere.run");
+        fs::write(&runtime, r#"#!/bin/sh
+case "$*" in
+  'plugin run mere-dataset-tools -- manifest --json')
+    echo '{"name":"mere-dataset-tools","version":"0.4.1"}' ;;
+  'plugin run mere-dataset-tools -- graph templates list --json')
+    echo '{"contract_version":"mere.run/graph-template-catalog.v1","templates":[{"id":"image-repair-composite"}]}' ;;
+  *) exit 2 ;;
+esac
+"#).expect("write runtime fixture");
+        fs::set_permissions(&runtime, fs::Permissions::from_mode(0o700))
+            .expect("launchable fixture");
+        let service = StudioService::new(directory.path().join("app")).expect("service");
+        {
+            let mut config = service.config.write().expect("configuration");
+            config.mere_run_command = Some(runtime.clone());
+            config.workflow_tools_command = Some(runtime);
+        }
+        let status = service.status().workflow_tools;
+        assert!(status.available);
+        assert_eq!(status.version.as_deref(), Some("0.4.1"));
+        assert!(status.path.is_none());
+        let templates = service.templates().expect("managed templates");
+        assert_eq!(
+            templates["document"]["result"]["templates"][0]["id"],
+            "image-repair-composite"
+        );
+    }
+
     #[test]
     fn studio_run_records_leave_cli_run_destinations_empty() {
         let root = tempfile::tempdir().expect("temporary app data");

@@ -17,7 +17,7 @@ impl StudioService {
                 onboarding_complete: false,
                 workspace: app_data.join("workspace"),
                 mere_run_command: discover_command("mere.run"),
-                workflow_tools_command: discover_command("mere-dataset-tools"),
+                workflow_tools_command: None,
             }
         };
         fs::create_dir_all(&config.workspace)?;
@@ -47,7 +47,7 @@ impl StudioService {
             workspace: config.workspace.display().to_string(),
             onboarding_complete: config.onboarding_complete,
             mere_run: command_status(config.mere_run_command.as_deref(), true),
-            workflow_tools: command_status(config.workflow_tools_command.as_deref(), false),
+            workflow_tools: self.workflow_tools_status(&config),
         }
     }
 
@@ -384,21 +384,52 @@ impl StudioService {
         )
     }
 
+    fn workflow_tools_invocation(config: &AppConfig) -> Option<(PathBuf, Vec<String>)> {
+        if let Some(override_path) = config.workflow_tools_command.as_ref() {
+            let is_runtime = config.mere_run_command.as_ref().is_some_and(|runtime| {
+                runtime == override_path || runtime.canonicalize().ok().is_some_and(|real_runtime| {
+                    override_path.canonicalize().ok().as_ref() == Some(&real_runtime)
+                })
+            });
+            if !is_runtime && override_path.file_name().is_some_and(|name| name != "mere.run") {
+                return Some((override_path.clone(), Vec::new()));
+            }
+        }
+        config.mere_run_command.clone().map(|runtime| {
+            (runtime, ["plugin", "run", "mere-dataset-tools", "--"].map(str::to_owned).to_vec())
+        })
+    }
+
+    fn workflow_tools_status(&self, config: &AppConfig) -> CommandStatus {
+        let Some((command, mut args)) = Self::workflow_tools_invocation(config) else {
+            return command_status(None, false);
+        };
+        let path = args.is_empty().then(|| command.display().to_string());
+        args.extend(["manifest".to_owned(), "--json".to_owned()]);
+        let result = self.run_command_in(&command, args, &config.workspace);
+        let manifest = result.ok().filter(|result| result.exit_code == 0)
+            .and_then(|result| serde_json::from_str::<Value>(&result.stdout).ok());
+        let version = manifest.as_ref().filter(|manifest| manifest["name"] == "mere-dataset-tools")
+            .and_then(|manifest| manifest["version"].as_str()).map(str::to_owned);
+        CommandStatus { path, available: version.is_some(), version, error: None }
+    }
+
     fn run_workflow_tools(&self, args: Vec<String>) -> StudioResult<CommandResult> {
-        let command = self
-            .config
-            .read()
-            .expect("desktop config lock poisoned")
-            .workflow_tools_command
-            .clone()
-            .ok_or_else(|| error("workflow tools are unavailable"))?;
-        self.run_command(&command, args)
+        let config = self.config.read().expect("desktop config lock poisoned").clone();
+        let (command, mut prefix) = Self::workflow_tools_invocation(&config)
+            .ok_or_else(|| error("Install Dataset Tools through the official plugin catalog."))?;
+        prefix.extend(args);
+        self.run_command_in(&command, prefix, &config.workspace)
     }
 
     fn run_command(&self, command: &Path, args: Vec<String>) -> StudioResult<CommandResult> {
+        self.run_command_in(command, args, &self.workspace())
+    }
+
+    fn run_command_in(&self, command: &Path, args: Vec<String>, directory: &Path) -> StudioResult<CommandResult> {
         let output = Command::new(command)
             .args(args)
-            .current_dir(self.workspace())
+            .current_dir(directory)
             .output()?;
         Ok(CommandResult {
             exit_code: output.status.code().unwrap_or(-1),
