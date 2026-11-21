@@ -97,13 +97,8 @@ impl StudioService {
 
     pub fn templates(&self) -> StudioResult<Value> {
         let local_templates = self.local_templates()?;
-        let tools = self
-            .config
-            .read()
-            .expect("desktop config lock poisoned")
-            .workflow_tools_command
-            .clone();
-        let Some(command) = tools else {
+        let config = self.config.read().expect("desktop config lock poisoned").clone();
+        if !self.workflow_tools_status(&config).available {
             return Ok(json!({
                 "available": !local_templates.is_empty(),
                 "document": synthetic_document(json!({
@@ -111,16 +106,13 @@ impl StudioService {
                     "templates": local_templates,
                 })),
             }));
-        };
-        let result = self.run_command(
-            &command,
-            vec![
-                "graph".to_owned(),
-                "templates".to_owned(),
-                "list".to_owned(),
-                "--json".to_owned(),
-            ],
-        )?;
+        }
+        let result = self.run_workflow_tools(vec![
+            "graph".to_owned(),
+            "templates".to_owned(),
+            "list".to_owned(),
+            "--json".to_owned(),
+        ])?;
         let mut document = result.document();
         if let Some(templates) = document
             .get_mut("result")

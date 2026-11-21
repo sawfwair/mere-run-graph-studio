@@ -65,9 +65,10 @@ impl StudioService {
         {
             status.mere_run = command_status(Some(&path), true);
         }
-        if !status.workflow_tools.available {
-            status.workflow_tools =
-                command_status(discover_command("mere-dataset-tools").as_deref(), false);
+        if status.mere_run.available && !status.workflow_tools.available {
+            let mut config = self.config.read().expect("desktop config lock poisoned").clone();
+            config.mere_run_command = status.mere_run.path.as_deref().map(PathBuf::from);
+            status.workflow_tools = self.workflow_tools_status(&config);
         }
         Ok(serde_json::to_value(status)?)
     }
@@ -83,14 +84,17 @@ impl StudioService {
         validate_model_id(id)?;
         let catalog = self.run_mere(&["plugin", "list", "--json"])?;
         let value: Value = serde_json::from_str(&catalog.stdout)?;
-        if catalog.exit_code != 0
-            || !value["plugins"]
-                .as_array()
-                .is_some_and(|plugins| plugins.iter().any(|plugin| plugin["id"] == id))
-        {
-            return Err(error("Select a plugin from the official runtime catalog"));
-        }
+        let plugin = value["plugins"].as_array()
+            .and_then(|plugins| plugins.iter().find(|plugin| plugin["id"] == id))
+            .filter(|_| catalog.exit_code == 0)
+            .ok_or_else(|| error("Select a plugin from the official runtime catalog"))?;
         let mut args = vec!["plugin".to_owned(), "install".to_owned(), id.to_owned()];
+        if object.get("source").and_then(Value::as_bool) == Some(true) {
+            args.push("--source".to_owned());
+        }
+        if plugin["installed"] == true {
+            args.push("--force".to_owned());
+        }
         if object.get("confirmed").and_then(Value::as_bool) == Some(true) {
             args.push("--yes".to_owned());
         }

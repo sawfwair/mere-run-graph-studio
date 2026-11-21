@@ -40,7 +40,7 @@ function CommandPathField({ title, description, path, placeholder, available, co
   onPath: (path: string) => void;
   onChoose: () => void;
 }) {
-  const valid = available && path === configuredPath;
+  const valid = available && path === (configuredPath ?? "");
   return (
     <label className={`setup-field ${optional ? 'optional' : ''}`}>
       <span><TerminalSquare size={16} /><strong>{title}</strong><small>{description}</small></span>
@@ -114,7 +114,7 @@ export function DesktopSetup({ status, settings = false, saving, error, onSave, 
             <div><input value={workspace} onChange={(event) => setWorkspace(event.target.value)} /><button onClick={() => void chooseWorkspace()} type="button"><FolderOpen size={15} /> Choose</button></div>
           </label>
           <CommandPathField title="mere.run" description="Required to validate and run workflows" path={mereRun} placeholder="Select the mere.run executable" available={status.mere_run.available} configuredPath={status.mere_run.path} version={status.mere_run.version} onPath={setMereRun} onChoose={() => void chooseCommand('Choose the mere.run executable', setMereRun)} />
-          <CommandPathField title="Workflow tools" description="Optional support for templates, programs, and ComfyUI import" path={workflowTools} placeholder="Optional mere-dataset-tools executable" available={status.workflow_tools.available} configuredPath={status.workflow_tools.path} version={status.workflow_tools.version} optional onPath={setWorkflowTools} onChoose={() => void chooseCommand('Choose workflow tools', setWorkflowTools)} />
+          <CommandPathField title="Workflow tools" description="Install Dataset Tools for templates, programs, and ComfyUI import" path={workflowTools} placeholder="Use the install managed by mere.run" available={status.workflow_tools.available} configuredPath={status.workflow_tools.path} version={status.workflow_tools.version} optional onPath={setWorkflowTools} onChoose={() => void chooseCommand('Choose workflow tools', setWorkflowTools)} />
         </div>
 
         {error ? <div className="setup-error" role="alert">{error}</div> : null}

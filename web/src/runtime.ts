@@ -304,8 +304,8 @@ export class NativeRuntime implements StudioRuntime {
     return invokeDecoded('studio_plugins', decodeJsonCommand);
   }
 
-  setupPlugin(id: string, confirmed: boolean): Promise<CommandDocument<JsonValue>> {
-    return invokeDecoded('studio_setup_plugin', decodeJsonCommand, { request: { id, confirmed } });
+  setupPlugin(id: string, confirmed: boolean, source = false): Promise<CommandDocument<JsonValue>> {
+    return invokeDecoded('studio_setup_plugin', decodeJsonCommand, { request: { id, confirmed, source } });
   }
 
   verifyLocal(): Promise<JsonObject> {

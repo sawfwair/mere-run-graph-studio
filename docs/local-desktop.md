@@ -16,7 +16,7 @@ Graph Studio's Tauri app invokes the public `mere.run` CLI through its Rust host
 3. Choose a workspace and save the detected `mere.run` executable. Studio checks the version against its compatibility matrix and reads the public graph catalog. You can also choose a compatible executable or a `MereRun.app` bundle manually.
 4. In **Desktop settings**, select **Verify local execution**. Studio preflights and runs three connected, model-free nodes through the configured CLI. It checks the declared output artifact and shows the run directory.
 
-The optional workflow-tools executable adds templates, program compilation, and ComfyUI import. Studio can run ordinary graphs without it.
+Install **Dataset Tools** from **Optional plugins** to open packaged templates, compile workflow programs, and import ComfyUI workflows. Graph Studio discovers the plugin through your configured mere.run executable. Leave the optional Workflow tools path blank to use that managed install.
 
 ## Prepare models and plugins
 
